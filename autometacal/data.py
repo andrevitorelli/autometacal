@@ -81,7 +81,7 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
       yield i, g1, g2, image
 
 
-class GalGenCosmos(tfds.core.GeneratorBasedBuilder):
+class GalGenCOSMOS(tfds.core.GeneratorBasedBuilder):
   """DatasetBuilder for COSMOS GalSim dataset."""
   def __init__(self):
       print("NOT IMPLEMENTED! COMING SOON")
@@ -122,7 +122,7 @@ class GalGenCosmos(tfds.core.GeneratorBasedBuilder):
 
       yield i ,image
 
-class GalgenHSC(tfds.core.GeneratorBasedBuilder):
+class GalGenHSC(tfds.core.GeneratorBasedBuilder):
   """DatasetBuilder for HSC simulated galaxies GalSim dataset."""
   def __init__(self):
       print("NOT IMPLEMENTED! COMING SOON")
