@@ -5,8 +5,8 @@ from typing import Union
 
 
 def exp_model(galaxy : Union[astropy.table.Row, dict]):
-    gal = galsim.Exponential(flux=galaxy['flux'] , half_light_radius=galaxy['re'])
-    return gal
+  gal = galsim.Exponential(flux=galaxy['flux'] , half_light_radius=galaxy['re'])
+  return gal
 
     
 def draw_gal_noise(galaxy : Union[astropy.table.Row, dict],
