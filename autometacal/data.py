@@ -27,41 +27,40 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
                galsim_interpolator = "linear"):
         """
         Inputs:
-            data_file: table from where ellipticities, size and snr is read
+            data_file: table from where shape parameters, size and snr are read
+            drawer: a galaxy drawer method from galaxies.py
             stamp_size : the size of the square images to be generated
             channels: how many channels (different filters) for each galaxy
-
+            galsim_drawing_method: see galsim
+            galsim_interpolator: not yet implemented
         """
-        self.data = Table.read(data_file)
-        self.stamp_size = stamp_size
-        self.channels = channels
-        self.train_split = train_split
-
-        self.drawer = lambda galaxy,psf : drawer(galaxy,
-                                                 psf,
-                                                 stamp_size = self.stamp_size,
-                                                 channels = self.channels,
-                                                 method = galsim_drawing_method,
-                                                 interpolator = galsim_interpolator)
-        super(GalGen,self).__init__()
+    self.data = Table.read(data_file)
+    self.stamp_size = stamp_size
+    self.channels = channels
+    self.train_split = train_split
+    self.drawer = lambda galaxy,psf : drawer(galaxy,
+                                             psf,
+                                             stamp_size = self.stamp_size,
+                                             channels = self.channels,
+                                             method = galsim_drawing_method,
+                                             interpolator = galsim_interpolator)
+    super(GalGen,self).__init__()
 
   def _info(self):
     return tfds.core.DatasetInfo(
-        builder=self,
-        # Description and homepage used for documentation
-        description=_DESCRIPTION,
-        homepage=_URL,
-        features=tfds.features.FeaturesDict({
-            'image_description': tfds.features.Text(),
-            'image': tfds.features.Image(shape=(self.stamp_size ,
-                                                self.stamp_size ,
-                                                self.channels)),
-            'label': tfds.features.ClassLabel(num_classes=2),
-            }),
-        supervised_keys=('image', 'label'),
-
-        citation=_CITATION,
-       )
+      builder=self,
+      # Description and homepage used for documentation
+      description=_DESCRIPTION,
+      homepage=_URL,
+      features=tfds.features.FeaturesDict({
+          'image_description': tfds.features.Text(),
+          'image': tfds.features.Image(shape=(self.stamp_size ,
+                                              self.stamp_size ,
+                                              self.channels)),
+          'label': tfds.features.ClassLabel(num_classes=2),
+          }),
+      supervised_keys=('image', 'label'),
+      citation=_CITATION)
 
   def _split_generators(self):
     """Returns generators according to split."""
@@ -83,12 +82,12 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
 
 
 class GalGenCosmos(tfds.core.GeneratorBasedBuilder):
-  """DatasetBuilder for my_dataset dataset."""
+  """DatasetBuilder for COSMOS GalSim dataset."""
   def __init__(self):
       print("NOT IMPLEMENTED! COMING SOON")
-  VERSION = tfds.core.Version('1.0.0')
+  VERSION = tfds.core.Version('0.0.0')
   RELEASE_NOTES = {
-      '1.0.0': 'Initial release.',
+      '0.0.0': 'Initial release.',
   }
 
   def _info(self) -> tfds.core.DatasetInfo:
@@ -124,24 +123,30 @@ class GalGenCosmos(tfds.core.GeneratorBasedBuilder):
       yield i ,image
 
 class GalgenHSC(tfds.core.GeneratorBasedBuilder):
-  """DatasetBuilder for my_dataset dataset."""
+  """DatasetBuilder for HSC simulated galaxies GalSim dataset."""
   def __init__(self):
       print("NOT IMPLEMENTED! COMING SOON")
 
-  VERSION = tfds.core.Version('1.0.0')
+  VERSION = tfds.core.Version('0.0.0')
   RELEASE_NOTES = {
-      '1.0.0': 'Initial release.',
+      '0.0.0': 'Initial release.',
   }
 
-  def _info(self) -> tfds.core.DatasetInfo:
-    """Dataset metadata (homepage, citation,...)."""
+  def _info(self):
     return tfds.core.DatasetInfo(
-        builder=self,
-        features=tfds.features.FeaturesDict({
-            'image': tfds.features.Image(shape=(256, 256, 3)),
-            'label': tfds.features.ClassLabel(names=['no', 'yes']),
-        }),
-    )
+      builder=self,
+      # Description and homepage used for documentation
+      description="HSC Weak Lensing Image Simulations",
+      homepage="https://hsc-release.mtk.nao.ac.jp/doc/index.php/weak-lensing-simulation-catalog-pdr1/",
+      features=tfds.features.FeaturesDict({
+          'image_description': tfds.features.Text(),
+          'image': tfds.features.Image(shape=(stamp_size ,
+                                              stamp_size ,
+                                              1)),
+          }),
+      supervised_keys=('image'),
+      citation="Mandelbaum 2018, arXiv:1710.00885")
+
 
   def _split_generators(self, dl_manager: tfds.download.DownloadManager):
     """Download the data and define splits."""
