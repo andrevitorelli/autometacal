@@ -1,11 +1,13 @@
 import numpy as np
+import random
 import galsim
 from astropy.table import Table
 import tensorflow_datasets as tfds
+
 from . import galaxies
 
-_DESCRIPTION = """Tensorflow-GalSim Universe (TenGU)."""
-_URL = 'https://github.com/andrevitorelli/TenGU'
+_DESCRIPTION = """Automatatic meta calibration."""
+_URL = 'https://github.com/CosmoStat/autometacal'
 _CITATION = r"""@article{my-awesome-dataset-2021, author = {Cosmostat},}"""
 
 class GalGen(tfds.core.GeneratorBasedBuilder):
@@ -104,27 +106,27 @@ class GalGenCosmos(tfds.core.GeneratorBasedBuilder):
     extracted_path = dl_manager.download_and_extract('https://zenodo.org/record/3242143/files/COSMOS_25.2_training_sample.tar.gz')
     cat = galsim.COSMOSCalog('COSMOS_25.2_training_sample')
     split = 0.7
-
-    cat_index = [ i for i in range(len(cat))]
+    trainlist = [0:round(split*len(cat))]
+    testlist = [0:round(split*len(cat))]
     # dl_manager returns pathlib-like objects with `path.read_text()`,
     # `path.iterdir()`,...
     return {
-        'train': self._generate_examples(cat),
-        'test': self._generate_examples(cat),
+        'train': self._generate_examples(cat,trainlist),
+        'test': self._generate_examples(cat,testlist),
     }
 
-  def _generate_examples(self, cat) -> Iterator[Tuple[Key, Example]]:
+  def _generate_examples(self, cat, sublist) -> Iterator[Tuple[Key, Example]]:
     """Generator of examples for each split."""
-    for i in range(len(cat)):
-      # Yields (key, example)
-      yield img_path.name, {
-          'image': img_path,
-          'label':  ,
-      }
+    for i in sublist:
+      gal = cat.makeGalaxy(i)
+      image =gal.original_gal.image.array
 
+      yield i ,image
 
 class GalgenHSC(tfds.core.GeneratorBasedBuilder):
   """DatasetBuilder for my_dataset dataset."""
+  def __init__(self):
+      print("NOT IMPLEMENTED! COMING SOON")
 
   VERSION = tfds.core.Version('1.0.0')
   RELEASE_NOTES = {
@@ -143,19 +145,25 @@ class GalgenHSC(tfds.core.GeneratorBasedBuilder):
 
   def _split_generators(self, dl_manager: tfds.download.DownloadManager):
     """Download the data and define splits."""
-    extracted_path = dl_manager.download_and_extract('http://data.org/data.zip')
+    data_choices = ["parent_best_processed", "parent_median_processed", "parent_worst_processed"]
+    
+
+    extracted_path = dl_manager.download_and_extract(f"https://hsc-release.mtk.nao.ac.jp/archive/pdr1_incremental/{data_choices[0]}.tar.gz")
+    cat = galsim.RealGalaxyCatalog(data_choices[0]) ##?
+    split = 0.7
+    trainlist = [0:round(split*len(cat))]
+    testlist = [0:round(split*len(cat))]
     # dl_manager returns pathlib-like objects with `path.read_text()`,
     # `path.iterdir()`,...
     return {
-        'train': self._generate_examples(path=extracted_path / 'train_images'),
-        'test': self._generate_examples(path=extracted_path / 'test_images'),
+        'train': self._generate_examples(cat,trainlist),
+        'test': self._generate_examples(cat,testlist),
     }
 
-  def _generate_examples(self, path) -> Iterator[Tuple[Key, Example]]:
+  def _generate_examples(self, cat, sublist) -> Iterator[Tuple[Key, Example]]:
     """Generator of examples for each split."""
-    for img_path in path.glob('*.jpeg'):
-      # Yields (key, example)
-      yield img_path.name, {
-          'image': img_path,
-          'label': 'yes' if img_path.name.startswith('yes_') else 'no',
-      }
+    for i in sublist:
+      gal = cat.makeGalaxy(i)
+      image =gal.original_gal.image.array
+
+      yield i ,image
