@@ -11,7 +11,7 @@ _URL = 'https://github.com/CosmoStat/autometacal'
 _CITATION = r"""@article{my-awesome-dataset-2021, author = {Cosmostat},}"""
 
 class GalGen(tfds.core.GeneratorBasedBuilder):
-  """Galaxy Generator for Tensorflow Operations."""
+  """Simple Galaxy Image Generator for Tensorflow Operations."""
 
   VERSION = tfds.core.Version('0.0.0')
   RELEASE_NOTES = {'0.0.0': "Initial code."}
