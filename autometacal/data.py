@@ -85,6 +85,7 @@ class GalGenCOSMOS(tfds.core.GeneratorBasedBuilder):
   """DatasetBuilder for COSMOS GalSim dataset."""
   def __init__(self):
       print("NOT IMPLEMENTED! COMING SOON")
+      super(GalGenCOSMOS,self).__init__()
   VERSION = tfds.core.Version('0.0.0')
   RELEASE_NOTES = {
       '0.0.0': 'Initial release.',
@@ -103,7 +104,7 @@ class GalGenCOSMOS(tfds.core.GeneratorBasedBuilder):
   def _split_generators(self, dl_manager: tfds.download.DownloadManager):
     """Download the data and define splits."""
     extracted_path = dl_manager.download_and_extract('https://zenodo.org/record/3242143/files/COSMOS_25.2_training_sample.tar.gz')
-    cat = galsim.COSMOSCalog('COSMOS_25.2_training_sample')
+    cat = galsim.COSMOSCatalog(extracted_path.as_posix() + 'COSMOS_25.2_training_sample')
     split = 0.7
     indexes = range(len(cat))
     np.random.shuffle(indexes)
