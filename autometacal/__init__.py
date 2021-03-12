@@ -1,2 +1,2 @@
 __version__ = "0.0.0"
-from . import data
+from . import data, galaxies
