@@ -6,7 +6,7 @@ import tensorflow_datasets as tfds
 
 from . import galaxies
 
-_DESCRIPTION = """Automatatic meta calibration."""
+_DESCRIPTION = """autometacal"""
 _URL = 'https://github.com/CosmoStat/autometacal'
 _CITATION = r"""@article{my-awesome-dataset-2021, author = {Cosmostat},}"""
 
