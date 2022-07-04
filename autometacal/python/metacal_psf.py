@@ -198,14 +198,14 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,st
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]][[0,step]]
+    [[0,0]],[[0,step]]
   )
   #2m_psf
   img2m_psf = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]][[0,-step]]
+    [[0,0]],[[0,-step]]
   )
   
   g1p_psf = method(img1p_psf)
