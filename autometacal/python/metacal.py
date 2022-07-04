@@ -110,41 +110,88 @@ def get_metacal_response(gal_images,
   return e, R
 
 
-def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,method):
+def get_metacal_response(gal_images,
+                         psf_images,
+                         reconvolution_psf_image,
+                         method):
+  """
+  Convenience function to compute the shear response
+  """  
+  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)
+  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)
+  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_image, dtype=tf.float32)
+  batch_size, _ , _ = gal_images.get_shape().as_list()
+  g = tf.zeros([batch_size, 2])
+  with tf.GradientTape() as tape:
+    tape.watch(g)
+    # Measure ellipticity under metacal
+    e = method(generate_mcal_image(gal_images,
+                                   psf_images,
+                                   reconvolution_psf_image,
+                                   g))
+    
+  # Compute response matrix
+
+  R = tape.batch_jacobian(e, g)
+  return e, R
+
+
+def get_metacal_response_finitediff(gal_image,
+                                    psf_image,
+                                    reconv_psf_image,
+                                    shear,
+                                    step,
+                                    method):
   """
   Gets shear response as a finite difference operation, 
   instead of automatic differentiation.
   """
+  batch_size, _ , _ = gal_image.get_shape().as_list()
+  step_batch = tf.constant(step,shape=(batch_size,1),dtype=tf.float32)
   
+  noshear = tf.zeros([batch_size,2])
+  step1p = tf.pad(step_batch,[[0,0],[0,1]])
+  step1m = tf.pad(-step_batch,[[0,0],[0,1]])
+  step2p = tf.pad(step_batch,[[0,0],[1,0]])
+  step2m = tf.pad(-step_batch,[[0,0],[1,0]])
+    
   img0s = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]]
+    noshear
   ) 
+  
+  shears1p = shear + step1p
   img1p = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[step,0]]
-  ) 
+    shears1p
+  )
+  
+  shears1m = shear + step1m 
   img1m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[-step,0]]
+    shears1m
   ) 
+  
+  shears2p = shear + step2p 
   img2p = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,step]]
-  ) 
+    shears2p
+  )
+  
+  shears2m = shear + step2m 
   img2m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,-step]]
+    shears2m
   ) 
   
   g0s = method(img0s)
@@ -172,5 +219,5 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,me
     '2p':g2p,
     '2m':g2m,    
   } 
-
+  
   return ellip_dict, R

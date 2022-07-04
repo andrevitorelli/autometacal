@@ -134,13 +134,22 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   Gets shear response as a finite difference operation, 
   instead of automatic differentiation.
   """
+
+  batch_size, _ , _ = gal_image.get_shape().as_list()
+  step_batch = tf.constant(step,shape=(batch_size,1),dtype=tf.float32)
+  
+  noshear = tf.zeros([batch_size,2])
+  step1p = tf.pad(step_batch,[[0,0],[0,1]])
+  step1m = tf.pad(-step_batch,[[0,0],[0,1]])
+  step2p = tf.pad(step_batch,[[0,0],[1,0]])
+  step2m = tf.pad(-step_batch,[[0,0],[1,0]])  
   
   #noshear
   img0s = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]],[[0,0]]
+    noshear,noshear
   )  
   
   #############SHEAR RESPONSE
@@ -149,32 +158,40 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[step,0]],[[0,0]]
-  )+ generate_fixnoise()
+    step1p,noshear
+  )+ generate_fixnoise(
+     noise,
+     psf_image,)
   
   #1m
   img1m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[-step,0]],[[0,0]]
-  )+ generate_fixnoise()
+    [[-step,0]],noshear
+  )+ generate_fixnoise(
+     noise,
+     psf_image,)
   
   #2p
   img2p = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,step]],[[0,0]]
-  )+ generate_fixnoise()
+    [[0,step]],noshear
+  )+ generate_fixnoise(
+     noise,
+     psf_image,)
   
   #2m
   img2m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,-step]],[[0,0]]
-  )+ generate_fixnoise()
+    [[0,-step]],noshear
+  )+ generate_fixnoise(
+     noise,
+     psf_image,)
   
   g0s = method(img0s)
   g1p = method(img1p)
@@ -198,11 +215,11 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]],[[step,0]]
+    noshear,step1p
   )+ generate_fixnoise(
     noise,
     psf_image,
-    [[0,0]],[[step,0]]  
+    noshear,step1p  
   )
 
   #1m_psf
@@ -210,33 +227,33 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]],[[-step,0]]
+    noshear,step1m
   )+ generate_fixnoise(
-      noise,
+    noise,
     psf_image,
-    [[0,0]],[[-step,0]]
+    noshear,step1m
   )
   #2p_psf
   img2p_psf = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]],[[0,step]]
+    noshear,step2p
   )+ generate_fixnoise(
-      noise,
+    noise,
     psf_image,
-    [[0,0]],[[0,step]]
+    noshear,step2p
   )
   #2m_psf
   img2m_psf = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,0]],[[0,-step]]
+    noshear,step2m
   )+ generate_fixnoise(
       noise,
     psf_image,
-    [[0,0]],[[0,-step]]
+    noshear,step2m
   )
   
   g1p_psf = method(img1p_psf)
