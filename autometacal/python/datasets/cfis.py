@@ -14,7 +14,7 @@ class CFISConfig(tfds.core.BuilderConfig):
   """BuilderConfig for CFIS Galaxies."""
 
   def __init__(self, *, galaxy_type="parametric", 
-                data_set_size=1000, stamp_size=51,
+                data_set_size=81499, stamp_size=51,
                 shear_g1=0.0, shear_g2=0.0, **kwargs):
     """BuilderConfig for CFIS.
     Args:
@@ -39,7 +39,7 @@ class CFISConfig(tfds.core.BuilderConfig):
 
     # Fixed parameters
     self.pixel_scale = 0.187
-    self.psf_fwhm = 0.65     # TODO: add varying PSF
+    self.psf_fwhm = 0.7     # TODO: add varying PSF
     self.psf_e1 = 0.0
     self.psf_e2 = 0.025
 
@@ -52,8 +52,7 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
       '0.5.0': 'Initial release.',
   }
   
-  BUILDER_CONFIGS = [CFISConfig(name="parametric_1k", galaxy_type="parametric", data_set_size=1000),
-                     CFISConfig(name="parametric_shear_1k", galaxy_type="parametric", data_set_size=1000, shear_g1=0.02)]
+  BUILDER_CONFIGS = [CFISConfig(name="parametric", galaxy_type="parametric", data_set_size=81499)]
 
   def _info(self) -> tfds.core.DatasetInfo:
     """Returns the dataset metadata."""
@@ -62,10 +61,10 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
         builder=self,
         description=_DESCRIPTION,
         features=tfds.features.FeaturesDict({
-          'obs': tfds.features.Tensor(shape=[self.builder_config.stamp_size,
+          'gal_model': tfds.features.Tensor(shape=[self.builder_config.stamp_size,
                                                    self.builder_config.stamp_size],
                                         dtype=tf.float32),
-          'psf': tfds.features.Tensor(shape=[self.builder_config.stamp_size,
+          'psf_image': tfds.features.Tensor(shape=[self.builder_config.stamp_size,
                                                    self.builder_config.stamp_size],
                                         dtype=tf.float32),    
 
@@ -75,7 +74,7 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
         # If there's a common (input, target) tuple from the
         # features, specify them here. They'll be used if
         # `as_supervised=True` in `builder.as_dataset`.
-        supervised_keys=("obs", "obs"),
+        supervised_keys=("gal_model", "gal_model"),
         homepage='https://dataset-homepage/',
         citation=_CITATION,
     )
@@ -114,19 +113,26 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
       gal = gal.withFlux(gal_flux)
       gal = gal.shear(g1=self.builder_config.shear_g1, g2=self.builder_config.shear_g2)
 
-      gal_conv = gs.Convolve(gal, psf)
+      gal_conv = gs.Convolve([gal, psf])
+      
+      
+      
+      
+      
       
       gal_stamp = gal_conv.drawImage(nx=self.builder_config.stamp_size, 
                                      ny=self.builder_config.stamp_size, 
                                      scale=self.builder_config.pixel_scale
                                      ).array.astype('float32')
+      
+      
                                           
       psf_stamp = psf.drawImage(nx=self.builder_config.stamp_size, 
                                 ny=self.builder_config.stamp_size, 
                                 scale=self.builder_config.pixel_scale
                                 ).array.astype('float32')
 
-      yield '%d'%i, {"obs": gal_stamp, 
-                     "psf": psf_stamp, 
-                     "noise_std": np.array([np.sqrt(sky_level)]).astype('float32'), 
+      yield '%d'%i, {"gal_model": gal_stamp, 
+                     "psf_image": psf_stamp, 
+                     "noise_image": noise_stamp, 
                      "mag": np.array([gal_mag]).astype('float32')}

@@ -117,7 +117,7 @@ def gs_generate_images(**kwargs):
               'g_scatter' : 0.25,     #
               'mean_hlr': .5,     #size
               'scatter_hlr': 0.1,  #
-              'psf_beta': 2.3,          #psf
+              'psf_beta': 4.8,          #psf
               'psf_fwhm': 0.7,        #
               'mean_snr': 200,        #snr
               'scatter_snr': 20,      #
