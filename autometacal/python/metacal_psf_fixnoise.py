@@ -161,37 +161,49 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
     step1p,noshear
   )+ generate_fixnoise(
      noise,
-     psf_image,)
+     psf_image,
+     reconv_psf_image,
+     step1p,noshear
+  )
   
   #1m
   img1m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[-step,0]],noshear
+    step1m,noshear
   )+ generate_fixnoise(
-     noise,
-     psf_image,)
+    noise,
+    psf_image,
+    reconv_psf_image,
+    step1m,noshear
+  )
   
   #2p
   img2p = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,step]],noshear
+    step2p,noshear
   )+ generate_fixnoise(
-     noise,
-     psf_image,)
+    noise,
+    psf_image,
+    reconv_psf_image,
+    step2p,noshear
+  )
   
   #2m
   img2m = generate_mcal_image(
     gal_image,
     psf_image,
     reconv_psf_image,
-    [[0,-step]],noshear
+    step2m,noshear
   )+ generate_fixnoise(
-     noise,
-     psf_image,)
+    noise,
+    psf_image,
+    reconv_psf_image,
+    step2m,noshear
+  )
   
   g0s = method(img0s)
   g1p = method(img1p)
@@ -219,6 +231,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   )+ generate_fixnoise(
     noise,
     psf_image,
+    reconv_psf_image,
     noshear,step1p  
   )
 
@@ -231,6 +244,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   )+ generate_fixnoise(
     noise,
     psf_image,
+    reconv_psf_image,
     noshear,step1m
   )
   #2p_psf
@@ -242,6 +256,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   )+ generate_fixnoise(
     noise,
     psf_image,
+    reconv_psf_image,
     noshear,step2p
   )
   #2m_psf
@@ -251,8 +266,9 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
     reconv_psf_image,
     noshear,step2m
   )+ generate_fixnoise(
-      noise,
+    noise,
     psf_image,
+    reconv_psf_image,
     noshear,step2m
   )
   
@@ -266,9 +282,9 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   Rpsf12 = (g2p_psf[:,0]-g2m_psf[:,0])/(2*step_psf)
   Rpsf22 = (g2p_psf[:,1]-g2m_psf[:,1])/(2*step_psf)
  
-  R = tf.transpose(tf.convert_to_tensor(
-    [[R11,R21],
-     [R12,R22]],dtype=tf.float32)
+  Rpsf = tf.transpose(tf.convert_to_tensor(
+    [[Rpsf11,Rpsf21],
+     [Rpsf12,Rpsf22]],dtype=tf.float32)
   )
   
   ellip_dict = {
