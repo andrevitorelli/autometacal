@@ -40,10 +40,10 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
   """
 
   BUILDER_CONFIGS = [
-      GalGenConfig(name='small_stamp_100k', dataset_size=100000, stamp_size=51, pixel_scale=.2),
-      GalGenConfig(name='large_stamp_100k', dataset_size=100000, stamp_size=101, pixel_scale=.2),
-      GalGenConfig(name='small_stamp_1k', dataset_size=1000, stamp_size=51, pixel_scale=.2),
-      GalGenConfig(name='large_stamp_1k', dataset_size=1000, stamp_size=101, pixel_scale=.2)
+      GalGenConfig(name='small_100k', dataset_size=100000, stamp_size=51, pixel_scale=.2),
+      GalGenConfig(name='large_100k', dataset_size=100000, stamp_size=101, pixel_scale=.2),
+      GalGenConfig(name='small_1k', dataset_size=1000, stamp_size=51, pixel_scale=.2),
+      GalGenConfig(name='large_1k', dataset_size=1000, stamp_size=101, pixel_scale=.2)
    ]
 
   VERSION = tfds.core.Version('0.5.0')
@@ -115,9 +115,9 @@ def gs_generate_images(**kwargs):
 
   defaults = {'g_range' : 0.7,        #elipticity
               'g_scatter' : 0.25,     #
-              'mean_hlr': .9,     #size
+              'mean_hlr': .5,     #size
               'scatter_hlr': 0.1,  #
-              'psf_beta': 5.0,          #psf
+              'psf_beta': 2.3,          #psf
               'psf_fwhm': 0.7,        #
               'mean_snr': 200,        #snr
               'scatter_snr': 20,      #
