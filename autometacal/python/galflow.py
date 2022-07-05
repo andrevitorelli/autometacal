@@ -1,6 +1,15 @@
 _INTERPOLATOR = "bernsteinquintic"
 import tensorflow as tf
 from tensorflow_addons.image import resampler
+
+_NUMERICAL_RESOLUTION = 32
+
+if _NUMERICAL_RESOLUTION == 32:
+  dtype_complex = tf.complex64
+  dtype_real = tf.float32
+if _NUMERICAL_RESOLUTION == 64:
+  dtype_complex = tf.complex128
+  dtype_real = tf.float64  
  
 def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   """
@@ -18,8 +27,8 @@ def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   """
   
   _ , nx, ny, _ = img.get_shape().as_list()
-  g1 = tf.convert_to_tensor(g1, dtype=tf.float32)
-  g2 = tf.convert_to_tensor(g2, dtype=tf.float32)
+  g1 = tf.convert_to_tensor(g1, dtype=dtype_real)
+  g2 = tf.convert_to_tensor(g2, dtype=dtype_real)
   gsqr = g1**2 + g2**2
   
   # Building a batched jacobian
@@ -34,17 +43,17 @@ def shear(img,g1,g2,interpolation=_INTERPOLATOR):
     transform_matrix = tf.linalg.inv(jac)
   
   #define a grid at pixel positions
-  warp = tf.stack(tf.meshgrid(tf.linspace(0.,tf.cast(nx,tf.float32)-1.,nx), 
-                              tf.linspace(0.,tf.cast(ny,tf.float32)-1.,ny)),axis=-1)[..., tf.newaxis]
+  warp = tf.stack(tf.meshgrid(tf.linspace(0.,tf.cast(nx,dtype_real)-1.,nx), 
+                              tf.linspace(0.,tf.cast(ny,dtype_real)-1.,ny)),axis=-1)[..., tf.newaxis]
 
   #get center
-  center = tf.convert_to_tensor([[nx/2],[ny/2]],dtype=tf.float32)
+  center = tf.convert_to_tensor([[nx/2],[ny/2]],dtype=dtype_real)
   
   #displace center to origin
   warp = warp - center
   
   #if fourier, no half pixel shift needed
-  warp -= int(img.dtype != tf.complex64)*.5
+  warp -= int(img.dtype != dtype_complex)*.5
 
   #apply shear
   warp = tf.matmul(transform_matrix[:, tf.newaxis, tf.newaxis, ...], warp)[...,0]
@@ -53,7 +62,7 @@ def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   warp = warp + center[...,0] 
  
   #if fourier, no half pixel shift needed
-  warp -= int(img.dtype != tf.complex64)*.5
+  warp -= int(img.dtype != dtype_complex)*.5
       
   #apply resampler
   if img.dtype == tf.complex64:
@@ -98,3 +107,20 @@ def dilate(img,factor,interpolator=_INTERPOLATOR):
   dilated= resampler(img,warp,interpolator)
   
   return tf.transpose(tf.transpose(dilated) /factor**2)
+
+###drawKimage###
+
+def makekimg(img,dtypes=dtype_complex):
+  im_shift = tf.signal.ifftshift(img,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
+  im_complex = tf.cast(im_shift, dtypes)
+  im_fft = tf.signal.fft2d(im_complex)
+  imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
+  return imk
+
+def makekpsf(psf,dtypes=dtype_complex):
+  psf_complex = tf.cast(psf, dtype=dtypes)
+  psf_fft = tf.signal.fft2d(psf_complex)
+  psf_fft_abs = tf.abs(psf_fft)
+  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtypes)
+  kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
+  return kpsf

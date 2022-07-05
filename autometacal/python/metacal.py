@@ -1,8 +1,7 @@
 # This file will contain the tools needed to generate a metacal image
 import tensorflow as tf
 from tensorflow.python.ops.gen_batch_ops import batch
-import galflow as gf
-import numpy as np
+from autometacal.python.galflow import shear, dilate, makekimg, makekpsf, dtype_complex, dtype_real 
 
 def generate_mcal_image(gal_images,
                         psf_images,
@@ -27,14 +26,13 @@ def generate_mcal_image(gal_images,
   
   """
   #cast stuff as float32 tensors
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)  
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)  
-  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_image, dtype=tf.float32)  
-  g = tf.convert_to_tensor(g, dtype=tf.float32)  
+  batch_size, nx, ny = gal_images.get_shape().as_list() 
+  g = tf.convert_to_tensor(g, dtype=dtype_real)  
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)  
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
+  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
   
-  #Get batch info
-  batch_size, nx, ny = gal_images.get_shape().as_list()  
-      
+   
   #add pads in real space
   fact = (padfactor - 1)//2 #how many image sizes to one direction
   paddings = tf.constant([[0, 0,], [nx*fact, nx*fact], [ny*fact, ny*fact]])
@@ -44,30 +42,19 @@ def generate_mcal_image(gal_images,
   padded_reconvolution_psf_image = tf.pad(reconvolution_psf_image,paddings)
     
   #Convert galaxy images to k space
-  im_shift = tf.signal.ifftshift(padded_gal_images,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, tf.complex64)
-  im_fft = tf.signal.fft2d(im_complex)
-  imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
+  imk = makekimg(gal_images,dtypes='complex64')#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  psf_complex = tf.cast(padded_psf_images, tf.complex64)
-  psf_fft = tf.signal.fft2d(psf_complex)
-  psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,tf.complex64)
-  kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
+  kpsf = makekpsf(psf_images)
 
   #Convert reconvolution psf image to k space 
-  rpsf_complex = tf.cast(padded_reconvolution_psf_image, tf.complex64)
-  rpsf_fft =  tf.signal.fft2d(rpsf_complex)
-  rpsf_fft_abs = tf.abs(rpsf_fft)
-  psf_fft_abs_complex = tf.cast(rpsf_fft_abs,tf.complex64)
-  krpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
-
+  krpsf = makekpsf(reconvolution_psf_images)
+  
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
   kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
                        tf.linspace(-0.5,0.5,padfactor*ny))
-  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype='complex64')
+  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype=dtype_complex)
   mask = tf.expand_dims(mask, axis=0)
 
   # Deconvolve image from input PSF

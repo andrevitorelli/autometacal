@@ -1,21 +1,5 @@
 import tensorflow as tf
-from autometacal.python.galflow import shear, dilate
-
-def makekimg(img,dtypes='complex64'):
-  im_shift = tf.signal.ifftshift(img,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, dtypes)
-  im_fft = tf.signal.fft2d(im_complex)
-  imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
-  return imk
-
-def makekpsf(psf,dtypes='complex64'):
-  psf_complex = tf.cast(psf, dtype=dtypes)
-  psf_fft = tf.signal.fft2d(psf_complex)
-  psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtypes)
-  kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
-  
-  return kpsf
+from autometacal.python.galflow import shear, dilate, makekimg, makekpsf, dtype_complex, dtype_real
 
 def generate_mcal_image(gal_images,
                         psf_images,
@@ -41,10 +25,10 @@ def generate_mcal_image(gal_images,
   """
   #cast stuff as float32 tensors
   batch_size, nx, ny = gal_images.get_shape().as_list() 
-  g = tf.convert_to_tensor(g, dtype=tf.float32)  
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)  
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)
-  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=tf.float32)
+  g = tf.convert_to_tensor(g, dtype=dtype_real)  
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)  
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
+  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
   
   #dilate reconvolution psf
   dilate_fact = 1. + 2.*tf.reduce_sum(g**2,axis=1)
@@ -58,10 +42,10 @@ def generate_mcal_image(gal_images,
   reconvolution_psf_images = tf.pad(reconvolution_psf_image,paddings)
   
   #Convert galaxy images to k space
-  imk = makekimg(gal_images,dtypes='complex64')#the fftshift is to put the 0 frequency at the center of the k image
+  imk = makekimg(gal_images,dtypes=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  kpsf = makekpsf(psf_images)
+  kpsf = makekpsf(psf_images,dtypes=dtype_complex)
 
   #Convert reconvolution psf image to k space 
   krpsf = makekpsf(reconvolution_psf_images)
@@ -126,7 +110,7 @@ def get_metacal_response(gal_images,
 
   Rs = tape.batch_jacobian(e, gs)
   R, Rpsf = Rs[...,0:2], Rs[...,2:4]
-  return e, epsf, R, Rpsf
+  return e, R, Rpsf
 
 
 def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,step,step_psf,method):
@@ -136,7 +120,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   """
 
   batch_size, _ , _ = gal_image.get_shape().as_list()
-  step_batch = tf.constant(step,shape=(batch_size,1),dtype=tf.float32)
+  step_batch = tf.constant(step,shape=(batch_size,1),dtype=dtype_real)
   
   noshear = tf.zeros([batch_size,2])
   step1p = tf.pad(step_batch,[[0,0],[0,1]])
@@ -284,7 +268,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
  
   Rpsf = tf.transpose(tf.convert_to_tensor(
     [[Rpsf11,Rpsf21],
-     [Rpsf12,Rpsf22]],dtype=tf.float32)
+     [Rpsf12,Rpsf22]],dtype=dtype_real)
   )
   
   ellip_dict = {

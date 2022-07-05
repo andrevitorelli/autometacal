@@ -1,20 +1,5 @@
 import tensorflow as tf
-from autometacal.python.galflow import shear, dilate
-def makekimg(img,dtypes='complex64'):
-  im_shift = tf.signal.ifftshift(img,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, dtypes)
-  im_fft = tf.signal.fft2d(im_complex)
-  imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
-  return imk
-
-def makekpsf(psf,dtypes='complex64'):
-  psf_complex = tf.cast(psf, dtype=dtypes)
-  psf_fft = tf.signal.fft2d(psf_complex)
-  psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtypes)
-  kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
-  
-  return kpsf
+from autometacal.python.galflow import shear, dilate, makekimg, makekpsf, dtype_complex, dtype_real 
 
 def generate_mcal_image(gal_images,
                         psf_images,
@@ -40,10 +25,10 @@ def generate_mcal_image(gal_images,
   """
   #cast stuff as float32 tensors
   batch_size, nx, ny = gal_images.get_shape().as_list() 
-  g = tf.convert_to_tensor(g, dtype=tf.float32)  
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)  
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)
-  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=tf.float32)
+  g = tf.convert_to_tensor(g, dtype=dtype_real)  
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)  
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
+  reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
   
   #dilate reconvolution psf
   dilate_fact = 1. + 2.*tf.reduce_sum(g**2,axis=1)
@@ -112,7 +97,7 @@ def get_metacal_response(gal_images,
 
   Rs = tape.batch_jacobian(e, gs)
   R, Rpsf = Rs[...,0:2], Rs[...,2:4]
-  return e, epsf, R, Rpsf
+  return e, R, Rpsf
 
 def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,step_psf,method):
   """
@@ -225,9 +210,9 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,st
   Rpsf12 = (g2p_psf[:,0]-g2m_psf[:,0])/(2*step_psf)
   Rpsf22 = (g2p_psf[:,1]-g2m_psf[:,1])/(2*step_psf)
  
-  R = tf.transpose(tf.convert_to_tensor(
-    [[R11,R21],
-     [R12,R22]],dtype=tf.float32)
+  Rpsf = tf.transpose(tf.convert_to_tensor(
+    [[Rpsf11,Rpsf21],
+     [Rpsf12,Rpsf22]],dtype=tf.float32)
   )
   
   ellip_dict = {
