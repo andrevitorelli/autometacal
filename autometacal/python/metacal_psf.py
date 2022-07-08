@@ -5,7 +5,7 @@ def generate_mcal_image(gal_images,
                         psf_images,
                         reconvolution_psf_images,
                         g, gp,
-                        padfactor=3):
+                        padfactor=5):
   """ Generate a metacalibrated image given input and target PSFs.
   
   Args: 
@@ -42,19 +42,19 @@ def generate_mcal_image(gal_images,
   reconvolution_psf_images = tf.pad(reconvolution_psf_image,paddings)
   
   #Convert galaxy images to k space
-  imk = makekimg(gal_images,dtypes='complex64')#the fftshift is to put the 0 frequency at the center of the k image
+  imk = makekimg(gal_images,dtype=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  kpsf = makekpsf(psf_images)
+  kpsf = makekpsf(psf_images,dtype=dtype_complex)
 
   #Convert reconvolution psf image to k space 
-  krpsf = makekpsf(reconvolution_psf_images)
+  krpsf = makekpsf(reconvolution_psf_images,dtype=dtype_complex)
 
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
   kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
                        tf.linspace(-0.5,0.5,padfactor*ny))
-  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype='complex64')
+  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype=dtype_complex)
   mask = tf.expand_dims(mask, axis=0)
   
   # Deconvolve image from input PSF
@@ -81,8 +81,8 @@ def get_metacal_response(gal_images,
   """
   Convenience function to compute the shear response
   """  
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
   batch_size, _ , _ = gal_images.get_shape().as_list()
   gs = tf.zeros([batch_size,4])
   epsf = method(reconvolution_psf_image) #doesn't work - biased
@@ -105,7 +105,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,st
   instead of automatic differentiation.
   """
   batch_size, _ , _ = gal_image.get_shape().as_list()
-  step_batch = tf.constant(step,shape=(batch_size,1),dtype=tf.float32)
+  step_batch = tf.constant(step,shape=(batch_size,1), dtype=dtype_real)
   
   noshear = tf.zeros([batch_size,2])
   step1p = tf.pad(step_batch,[[0,0],[0,1]])
@@ -166,7 +166,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,st
   
   R = tf.transpose(tf.convert_to_tensor(
     [[R11,R21],
-     [R12,R22]],dtype=tf.float32)
+     [R12,R22]], dtype=dtype_real)
   )
   
   ####################PSF RESPONSE  
@@ -212,7 +212,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,step,st
  
   Rpsf = tf.transpose(tf.convert_to_tensor(
     [[Rpsf11,Rpsf21],
-     [Rpsf12,Rpsf22]],dtype=tf.float32)
+     [Rpsf12,Rpsf22]], dtype=dtype_real)
   )
   
   ellip_dict = {

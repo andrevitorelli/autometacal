@@ -5,7 +5,7 @@ def generate_mcal_image(gal_images,
                         psf_images,
                         reconvolution_psf_images,
                         g, gp,
-                        padfactor=3):
+                        padfactor=5):
   """ Generate a metacalibrated image given input and target PSFs.
   
   Args: 
@@ -42,19 +42,19 @@ def generate_mcal_image(gal_images,
   reconvolution_psf_images = tf.pad(reconvolution_psf_image,paddings)
   
   #Convert galaxy images to k space
-  imk = makekimg(gal_images,dtypes=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
+  imk = makekimg(gal_images,dtype=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  kpsf = makekpsf(psf_images,dtypes=dtype_complex)
+  kpsf = makekpsf(psf_images,dtype=dtype_complex)
 
   #Convert reconvolution psf image to k space 
-  krpsf = makekpsf(reconvolution_psf_images)
+  krpsf = makekpsf(reconvolution_psf_images, dtype=dtype_complex)
 
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
   kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
                        tf.linspace(-0.5,0.5,padfactor*ny))
-  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype='complex64')
+  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype=dtype_complex)
   mask = tf.expand_dims(mask, axis=0)
   
   # Deconvolve image from input PSF
@@ -74,7 +74,7 @@ def generate_mcal_image(gal_images,
   return img[:,fact*nx:-fact*nx,fact*ny:-fact*ny]
 
 def generate_fixnoise(noise,psf_images,reconvolution_psf_image,g,gp):
-  noise = tf.convert_to_tensor(noise,dtype=tf.float32)
+  noise = tf.convert_to_tensor(noise,dtype=dtype_real)
   shearednoise = generate_mcal_image(noise,
                                    psf_images,
                                    reconvolution_psf_image,g,gp )
@@ -89,8 +89,8 @@ def get_metacal_response(gal_images,
   """
   Convenience function to compute the shear response
   """  
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
   batch_size, _ , _ = gal_images.get_shape().as_list()
   gs = tf.zeros([batch_size,4])
   epsf = method(reconvolution_psf_image) #doesn't work - biased
@@ -202,7 +202,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   
   R = tf.transpose(tf.convert_to_tensor(
     [[R11,R21],
-     [R12,R22]],dtype=tf.float32)
+     [R12,R22]],dtype=dtype_real)
   ) 
   
   ####################PSF RESPONSE  

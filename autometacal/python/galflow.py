@@ -1,8 +1,8 @@
-_INTERPOLATOR = "bernsteinquintic"
 import tensorflow as tf
 from tensorflow_addons.image import resampler
 
 _NUMERICAL_RESOLUTION = 32
+_INTERPOLATOR = "bernsteinquintic"
 
 if _NUMERICAL_RESOLUTION == 32:
   dtype_complex = tf.complex64
@@ -65,7 +65,7 @@ def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   warp -= int(img.dtype != dtype_complex)*.5
       
   #apply resampler
-  if img.dtype == tf.complex64:
+  if img.dtype == dtype_complex:
     a = resampler(tf.math.real(img),warp,interpolation)
     b = resampler(tf.math.imag(img),warp,interpolation)
     sheared = tf.complex(a,b)
@@ -84,17 +84,17 @@ def dilate(img,factor,interpolator=_INTERPOLATOR):
   Returns:
     dilated: tf tensor containing [batch_size, nx, ny, channels] images dilated by factor around the centre
   """
-  img = tf.convert_to_tensor(img,dtype=tf.float32)
+  img = tf.convert_to_tensor(img,dtype=dtype_real)
   batch_size, nx, ny, _ = img.get_shape()
 
   #x
-  sampling_x = tf.linspace(0.,tf.cast(nx,tf.float32)-1.,nx)[tf.newaxis]
+  sampling_x = tf.linspace(0.,tf.cast(nx,dtype_real)-1.,nx)[tf.newaxis]
   centred_sampling_x = sampling_x - nx//2
   batched_sampling_x = tf.repeat(centred_sampling_x,batch_size,axis=0)
   rescale_sampling_x = tf.transpose(batched_sampling_x) / factor
   reshift_sampling_x = tf.transpose(rescale_sampling_x)+nx//2
   #y
-  sampling_y = tf.linspace(0.,tf.cast(ny,tf.float32)-1.,ny)[tf.newaxis]
+  sampling_y = tf.linspace(0.,tf.cast(ny,dtype_real)-1.,ny)[tf.newaxis]
   centred_sampling_y = sampling_y - ny//2
   batched_sampling_y = tf.repeat(centred_sampling_y,batch_size,axis=0)
   rescale_sampling_y = tf.transpose(batched_sampling_y) / factor
@@ -109,18 +109,17 @@ def dilate(img,factor,interpolator=_INTERPOLATOR):
   return tf.transpose(tf.transpose(dilated) /factor**2)
 
 ###drawKimage###
-
-def makekimg(img,dtypes=dtype_complex):
+def makekimg(img,dtype=dtype_complex):
   im_shift = tf.signal.ifftshift(img,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, dtypes)
+  im_complex = tf.cast(im_shift, dtype)
   im_fft = tf.signal.fft2d(im_complex)
   imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
   return imk
 
-def makekpsf(psf,dtypes=dtype_complex):
-  psf_complex = tf.cast(psf, dtype=dtypes)
+def makekpsf(psf,dtype=dtype_complex):
+  psf_complex = tf.cast(psf, dtype=dtype)
   psf_fft = tf.signal.fft2d(psf_complex)
   psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtypes)
+  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtype)
   kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
   return kpsf

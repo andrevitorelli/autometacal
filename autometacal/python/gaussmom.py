@@ -21,7 +21,7 @@ def get_moment_ellipticities(images, scale, fwhm, **kwargs):
     
   Returns:
     Ellipticities: tf.Tensor
-      A batch of ellipticities according to the |g| = (a - b)/(a + b) convention.
+      A batch of ellipticities according to the |e| = (a - b)/(a + b) convention.
     
   """  
   
@@ -29,7 +29,7 @@ def get_moment_ellipticities(images, scale, fwhm, **kwargs):
   
   q1 = Q11 - Q22
   q2 = 2*Q12
-  T= Q11  + Q22 # e convention 
+  T= Q11  + Q22 #+ 2*tf.sqrt(tf.math.abs(Q11*Q22 - Q12**2))# e convention 
   
   g1 = q1/T
   g2 = q2/T

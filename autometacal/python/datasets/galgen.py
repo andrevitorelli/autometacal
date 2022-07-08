@@ -1,4 +1,4 @@
-"""gal_gen dataset."""
+"""GalGen dataset."""
 import tensorflow_datasets as tfds
 import tensorflow as tf
 import numpy as np
@@ -12,7 +12,7 @@ _URL = "https://github.com/CosmoStat/autometacal"
 class GalGenConfig(tfds.core.BuilderConfig):
   """BuilderConfig for GalGen."""
 
-  def __init__(self, *,dataset_size=None, stamp_size=None, pixel_scale=None, **kwargs):
+  def __init__(self, *,dataset_size=100000, stamp_size=51, pixel_scale=.263, **kwargs):
     """BuilderConfig for GalGen.
     Args:
       pixel_scale: pixel_scale of the image in arcsec/pixel.
@@ -40,10 +40,10 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
   """
 
   BUILDER_CONFIGS = [
-      GalGenConfig(name='small_100k', dataset_size=100000, stamp_size=51, pixel_scale=.2),
-      GalGenConfig(name='large_100k', dataset_size=100000, stamp_size=101, pixel_scale=.2),
-      GalGenConfig(name='small_1k', dataset_size=1000, stamp_size=51, pixel_scale=.2),
-      GalGenConfig(name='large_1k', dataset_size=1000, stamp_size=101, pixel_scale=.2)
+      GalGenConfig(name='small_100k', dataset_size=100000, stamp_size=51),
+      GalGenConfig(name='large_100k', dataset_size=100000, stamp_size=101),
+      GalGenConfig(name='small_1k', dataset_size=1000, stamp_size=51),
+      GalGenConfig(name='large_1k', dataset_size=1000, stamp_size=101)
    ]
 
   VERSION = tfds.core.Version('0.5.0')
@@ -81,8 +81,7 @@ class GalGen(tfds.core.GeneratorBasedBuilder):
     for i in range(dataset_size):
       
       #generate example
-      label, model, obs_img, psf_img, = gs_generate_images(stamp_size = stamp_size,
-                                                          )               
+      label, model, obs_img, psf_img, = gs_generate_images(stamp_size = stamp_size)               
       yield '%d'%i, {'gal_model': model,   #noiseless PSFless galaxy model
                      'obs_image': obs_img, #observed image
                      'psf_image': psf_img, #psf image 
@@ -121,11 +120,9 @@ def gs_generate_images(**kwargs):
               'psf_fwhm': 0.7,        #
               'mean_snr': 200,        #snr
               'scatter_snr': 20,      #
-              'pixel_scale' : 0.2,    #
+              'pixel_scale' : 0.263,    #
               'stamp_size' : 51,      #
               'method' : "no_pixel",   #
-              'interp_factor': 2,     #kimage interpolation
-              'padding_factor': 1     #kimage padding
              }
 
   defaults.update(kwargs)
