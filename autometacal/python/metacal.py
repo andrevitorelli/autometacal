@@ -5,9 +5,9 @@ from autometacal.python.galflow import shear, dilate, makekimg, makekpsf, dtype_
 
 def generate_mcal_image(gal_images,
                         psf_images,
-                        reconvolution_psf_image,
+                        reconvolution_psf_images,
                         g,
-                        padfactor=3):
+                        padfactor=5):
   """ Generate a metacalibrated image given input and target PSFs.
   
   Args: 
@@ -42,13 +42,13 @@ def generate_mcal_image(gal_images,
   padded_reconvolution_psf_image = tf.pad(reconvolution_psf_image,paddings)
     
   #Convert galaxy images to k space
-  imk = makekimg(gal_images,dtypes='complex64')#the fftshift is to put the 0 frequency at the center of the k image
+  imk = makekimg(gal_images,dtype=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  kpsf = makekpsf(psf_images)
+  kpsf = makekpsf(psf_images,dtype=dtype_complex)
 
   #Convert reconvolution psf image to k space 
-  krpsf = makekpsf(reconvolution_psf_images)
+  krpsf = makekpsf(reconvolution_psf_images,dtype=dtype_complex)
   
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
