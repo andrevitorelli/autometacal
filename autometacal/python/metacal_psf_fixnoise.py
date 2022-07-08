@@ -122,7 +122,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconv_psf_image,noise,s
   batch_size, _ , _ = gal_image.get_shape().as_list()
   step_batch = tf.constant(step,shape=(batch_size,1),dtype=dtype_real)
   
-  noshear = tf.zeros([batch_size,2])
+  noshear = tf.zeros([batch_size,2],dtype=dtype_real)
   step1p = tf.pad(step_batch,[[0,0],[0,1]])
   step1m = tf.pad(-step_batch,[[0,0],[0,1]])
   step2p = tf.pad(step_batch,[[0,0],[1,0]])

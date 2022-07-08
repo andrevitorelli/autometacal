@@ -7,9 +7,11 @@ _INTERPOLATOR = "bernsteinquintic"
 if _NUMERICAL_RESOLUTION == 32:
   dtype_complex = tf.complex64
   dtype_real = tf.float32
+  dtype_int = tf.int32
 if _NUMERICAL_RESOLUTION == 64:
   dtype_complex = tf.complex128
-  dtype_real = tf.float64  
+  dtype_real = tf.float64
+  dtype_int = tf.int64
  
 def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   """
@@ -43,8 +45,8 @@ def shear(img,g1,g2,interpolation=_INTERPOLATOR):
     transform_matrix = tf.linalg.inv(jac)
   
   #define a grid at pixel positions
-  warp = tf.stack(tf.meshgrid(tf.linspace(0.,tf.cast(nx,dtype_real)-1.,nx), 
-                              tf.linspace(0.,tf.cast(ny,dtype_real)-1.,ny)),axis=-1)[..., tf.newaxis]
+  warp = tf.stack(tf.meshgrid(tf.linspace(tf.cast(0.,dtype_real),tf.cast(nx,dtype_real)-1.,nx), 
+                              tf.linspace(tf.cast(0.,dtype_real),tf.cast(ny,dtype_real)-1.,ny)),axis=-1)[..., tf.newaxis]
 
   #get center
   center = tf.convert_to_tensor([[nx/2],[ny/2]],dtype=dtype_real)
@@ -88,13 +90,13 @@ def dilate(img,factor,interpolator=_INTERPOLATOR):
   batch_size, nx, ny, _ = img.get_shape()
 
   #x
-  sampling_x = tf.linspace(0.,tf.cast(nx,dtype_real)-1.,nx)[tf.newaxis]
+  sampling_x = tf.linspace(tf.cast(0.,dtype_real),tf.cast(nx,dtype_real)-1.,nx)[tf.newaxis]
   centred_sampling_x = sampling_x - nx//2
   batched_sampling_x = tf.repeat(centred_sampling_x,batch_size,axis=0)
   rescale_sampling_x = tf.transpose(batched_sampling_x) / factor
   reshift_sampling_x = tf.transpose(rescale_sampling_x)+nx//2
   #y
-  sampling_y = tf.linspace(0.,tf.cast(ny,dtype_real)-1.,ny)[tf.newaxis]
+  sampling_y = tf.linspace(tf.cast(0.,dtype_real),tf.cast(ny,dtype_real)-1.,ny)[tf.newaxis]
   centred_sampling_y = sampling_y - ny//2
   batched_sampling_y = tf.repeat(centred_sampling_y,batch_size,axis=0)
   rescale_sampling_y = tf.transpose(batched_sampling_y) / factor

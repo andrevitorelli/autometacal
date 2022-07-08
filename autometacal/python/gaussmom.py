@@ -2,6 +2,7 @@ from .tf_ngmix.moments import get_moments
 from .tf_ngmix.gmix import create_gmix,  fwhm_to_T
 from .tf_ngmix.pixels import make_pixels
 import tensorflow as tf
+from autometacal.python.galflow import dtype_real
 
 def get_moment_ellipticities(images, scale, fwhm, **kwargs):
   """
@@ -68,7 +69,7 @@ def moments(images, scale, fwhm, **kwargs):
   
   defaults.update(kwargs)
    
-  pix_weights = tf.ones([images.shape[0],images.shape[1],images.shape[2]])
+  pix_weights = tf.ones([images.shape[0],images.shape[1],images.shape[2]],dtype=dtype_real)
   pixels = make_pixels(
     images, 
     pix_weights, 
@@ -77,7 +78,7 @@ def moments(images, scale, fwhm, **kwargs):
   )
   
   T = fwhm_to_T(fwhm)
-  wt = create_gmix([0.,0.,0.,0.,T,1.],'gauss')
+  wt = create_gmix(tf.cast([0.,0.,0.,0.,T,1.],dtype=dtype_real),'gauss')
   
   #Q21=Q12
   Q11, Q12, Q22  = get_moments(wt,pixels)

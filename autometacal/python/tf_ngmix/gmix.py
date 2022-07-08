@@ -8,7 +8,7 @@ ver: 0.0.0
 """
 
 import tensorflow as tf
-
+from autometacal.python.galflow import dtype_real
 pi = 3.141592653589793
 
 #############utilites conversions
@@ -16,7 +16,7 @@ def fwhm_to_sigma(fwhm):
   """
   convert fwhm to sigma for a gaussian
   """
-  return fwhm / 2.3548200450309493
+  return fwhm / tf.cast(2.3548200450309493,dtype=dtype_real)
 
 def fwhm_to_T(fwhm):
   """
@@ -33,13 +33,13 @@ def g1g2_to_e1e2(g1, g2):
   g = tf.math.sqrt(g1 * g1 + g2 * g2)
 
   if g == 0.0:
-    e1 = 0.0
-    e2 = 0.0
+    e1 = tf.cast(0.0,dtype=dtype_real)
+    e2 = tf.cast(0.0,dtype=dtype_real)
   else:
     eta = 2 * tf.math.atanh(g)
     e = tf.math.tanh(eta)
     if e >= 1.0:
-      e = 0.99999999
+      e = tf.cast(0.99999999,dtype=dtype_real)
 
     fac = e / g
 
@@ -145,8 +145,8 @@ def create_gmix(pars,model):
   e1, e2 = g1g2_to_e1e2(g1, g2)
 
   #new ways
-  T_i_2 = 0.5 * T * fvals
-  flux_i = flux * pvals
+  T_i_2 = 0.5 * T * tf.cast(fvals,dtype=dtype_real)
+  flux_i = flux * tf.cast(pvals,dtype=dtype_real)
   
   gmix0 = flux_i #p
   gmix1 = tf.fill(n_gauss,row)
@@ -155,7 +155,7 @@ def create_gmix(pars,model):
   gmix4 = T_i_2 * e2 #irc
   gmix5 = T_i_2 * (1 + e1) #icc
   gmix6 = gmix3 * gmix5 - gmix4  * gmix4 #det
-  gmix7 = tf.ones(n_gauss)  
+  gmix7 = tf.ones(n_gauss,dtype=dtype_real)  
   #set norms
   gmix8 = gmix3 / gmix6 #drr
   gmix9 = gmix4 / gmix6 #drc

@@ -1,5 +1,6 @@
 import tensorflow as tf
 from autometacal.python import galflow as gf
+from autometacal.python.galflow import dtype_real, dtype_complex
 
 def noiseless_real_mcal_image(
   gal_images,
@@ -20,15 +21,15 @@ def noiseless_real_mcal_image(
       shearing by g, and reconvolution with reconvolution_psf_image.
   """
   #cast stuff as float32 tensors
-  gal_images = tf.convert_to_tensor(gal_images, dtype=tf.float32)  
-  psf_images = tf.convert_to_tensor(psf_images, dtype=tf.float32)  
-  g = tf.convert_to_tensor(g, dtype=tf.float32)  
+  gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)  
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)  
+  g = tf.convert_to_tensor(g, dtype=dtype_real)  
   
   #Get batch info
   batch_size, nx, ny = gal_images.get_shape().as_list()  
       
   #add pads in real space
-  padfactor = 3 #total width of image after padding
+  padfactor = 5 #total width of image after padding
   fact = (padfactor - 1)//2 #how many image sizes to one direction
   paddings = tf.constant([[0, 0,], [nx*fact, nx*fact], [ny*fact, ny*fact]])
   
@@ -37,22 +38,22 @@ def noiseless_real_mcal_image(
     
   #Convert galaxy models to k space
   im_shift = tf.signal.ifftshift(padded_gal_images,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, tf.complex64)
+  im_complex = tf.cast(im_shift, dtype_complex)
   im_fft = tf.signal.fft2d(im_complex)
   imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf image to k space 
-  psf_complex = tf.cast(padded_psf_images, tf.complex64)
+  psf_complex = tf.cast(padded_psf_images, dtype_complex)
   psf_fft =  tf.signal.fft2d(psf_complex)
   psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,tf.complex64)
+  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype_complex)
   kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
 
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
   kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
                        tf.linspace(-0.5,0.5,padfactor*ny))
-  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype='complex64')
+  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype=dtype_complex)
   mask = tf.expand_dims(mask, axis=0)
 
   # Deconvolve image from input PSF
