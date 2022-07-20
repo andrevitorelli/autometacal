@@ -32,24 +32,26 @@ def generate_mcal_image(gal_images,
   psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
   reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
   
-   
-  #add pads in real space
+  #dilate reconvolution psf
+  dilate_fact = 1.0 + 2.*tf.math.sqrt(tf.reduce_sum(g**2,axis=1))
+  reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],dilate_fact)[...,0]
+  
+  #pad images
   fact = (padfactor - 1)//2 #how many image sizes to one direction
   paddings = tf.constant([[0, 0,], [nx*fact, nx*fact], [ny*fact, ny*fact]])
-    
-  padded_gal_images = tf.pad(gal_images,paddings)
-  padded_psf_images = tf.pad(psf_images,paddings)
-  padded_reconvolution_psf_image = tf.pad(reconvolution_psf_image,paddings)
-    
+  gal_images = tf.pad(gal_images,paddings)
+  psf_images = tf.pad(psf_images,paddings)
+  reconvolution_psf_images = tf.pad(reconvolution_psf_image,paddings)
+  
   #Convert galaxy images to k space
   imk = makekimg(gal_images,dtype=dtype_complex)#the fftshift is to put the 0 frequency at the center of the k image
   
   #Convert psf images to k space  
-  kpsf = makekpsf(psf_images,dtype=dtype_complex)
+  kpsf = makekimg(psf_images,dtype=dtype_complex)
 
   #Convert reconvolution psf image to k space 
-  krpsf = makekpsf(reconvolution_psf_images,dtype=dtype_complex)
-  
+  krpsf = makekimg(reconvolution_psf_images, dtype=dtype_complex)
+
   # Compute Fourier mask for high frequencies
   # careful, this is not exactly the correct formula for fftfreq
   kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
@@ -58,10 +60,10 @@ def generate_mcal_image(gal_images,
   mask = tf.expand_dims(mask, axis=0)
 
   # Deconvolve image from input PSF
-  im_deconv = imk * ( (1./(kpsf+1e-10))*mask)
+  im_deconv = imk * 1./(kpsf*mask+1e-10)
 
   # Apply shear
-  im_sheared = gf.shear(tf.expand_dims(im_deconv,-1), g[...,0], g[...,1])[...,0]
+  im_sheared = shear(tf.expand_dims(im_deconv,-1), g[...,0], g[...,1])[...,0]
 
   # Reconvolve with target PSF
   im_reconv = tf.signal.ifft2d(tf.signal.ifftshift(im_sheared * krpsf * mask))
@@ -126,7 +128,6 @@ def get_metacal_response(gal_images,
 def get_metacal_response_finitediff(gal_image,
                                     psf_image,
                                     reconv_psf_image,
-                                    shear,
                                     step,
                                     method):
   """
@@ -149,7 +150,7 @@ def get_metacal_response_finitediff(gal_image,
     noshear
   ) 
   
-  shears1p = shear + step1p
+  shears1p = step1p
   img1p = generate_mcal_image(
     gal_image,
     psf_image,
@@ -157,7 +158,7 @@ def get_metacal_response_finitediff(gal_image,
     shears1p
   )
   
-  shears1m = shear + step1m 
+  shears1m = step1m 
   img1m = generate_mcal_image(
     gal_image,
     psf_image,
@@ -165,7 +166,7 @@ def get_metacal_response_finitediff(gal_image,
     shears1m
   ) 
   
-  shears2p = shear + step2p 
+  shears2p = step2p 
   img2p = generate_mcal_image(
     gal_image,
     psf_image,
@@ -173,7 +174,7 @@ def get_metacal_response_finitediff(gal_image,
     shears2p
   )
   
-  shears2m = shear + step2m 
+  shears2m = step2m 
   img2m = generate_mcal_image(
     gal_image,
     psf_image,

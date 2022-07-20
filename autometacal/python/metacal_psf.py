@@ -31,7 +31,7 @@ def generate_mcal_image(gal_images,
   reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
   
   #dilate reconvolution psf
-  dilate_fact = 1. + 2.*tf.reduce_sum(g**2,axis=1)
+  dilate_fact = 1.0 + 2.*tf.reduce_sum(g**2,axis=1)
   reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],dilate_fact)[...,0]
   
   #pad images
