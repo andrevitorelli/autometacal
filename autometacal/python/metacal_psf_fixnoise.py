@@ -29,7 +29,7 @@ def generate_mcal_image(gal_images,
   gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)  
   psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
   reconvolution_psf_image = tf.convert_to_tensor(reconvolution_psf_images, dtype=dtype_real)
-  
+    
   #pad images
   fact = (padfactor - 1)//2 #how many image sizes to one direction
   paddings = tf.constant([[0, 0,], [nx*fact, nx*fact], [ny*fact, ny*fact]])
@@ -93,15 +93,15 @@ def get_metacal_response(gal_images,
   with tf.GradientTape() as tape:
     tape.watch(gs)
     # Measure ellipticity under metacal
-    reconvolution_psf = dilate(reconvolution_psf_image[...,tf.newaxis],1.+2.*tf.norm(gs[:,0:2]))[...,0]
+    reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.+2.*tf.norm(gs[:,0:2]))[...,0]
     mcal_image = generate_mcal_image(gal_images,
                                      psf_images,
-                                     reconvolution_psf,
+                                     reconvolution_psf_image,
                                      gs[:,0:2],gs[:,2:4])
     
     mcal_image += generate_fixnoise(noise,
                                     psf_images,
-                                    reconvolution_psf,
+                                    reconvolution_psf_image,
                                     gs[:,0:2],gs[:,2:4])
     
     e = method(mcal_image)
@@ -126,6 +126,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
   step2p = tf.pad(step_batch,[[0,0],[1,0]])
   step2m = tf.pad(-step_batch,[[0,0],[1,0]])  
   
+  
   #full mcal image generator
   def generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,gs,gp):
     
@@ -143,14 +144,16 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
     return mcal_image
   
   #noshear
-  img0s = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,noshear,noshear)
+  reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.+1.*tf.norm(noshear))[...,0]
+  img0s = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,noshear)
   g0s = method(img0s)
   
   #shear response
-  img1p = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,step1p,noshear)
-  img1m = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,step1m,noshear)
-  img2p = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,step2p,noshear)
-  img2m = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,step2m,noshear)
+  reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.+1.*tf.norm(step1p))[...,0]
+  img1p = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,step1p,noshear)
+  img1m = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,step1m,noshear)
+  img2p = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,step2p,noshear)
+  img2m = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,step2m,noshear)
   
   g1p = method(img1p)
   g1m = method(img1m)
@@ -168,10 +171,11 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
   ) 
   
   #psf response
-  img1p_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,noshear,step1p)
-  img1m_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,noshear,step1m)
-  img2p_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,noshear,step2p)
-  img2m_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf,noise,noshear,step2m)
+  reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.+1.*tf.norm(noshear))[...,0]
+  img1p_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,step1p)
+  img1m_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,step1m)
+  img2p_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,step2p)
+  img2m_psf = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,step2m)
 
   g1p_psf = method(img1p_psf)
   g1m_psf = method(img1m_psf)
