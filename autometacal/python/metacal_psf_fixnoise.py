@@ -84,10 +84,12 @@ def get_metacal_response(gal_images,
                          method):
   """
   Convenience function to compute the shear response
-  """  
+  """
+  #check/cast as tensors
   gal_images = tf.convert_to_tensor(gal_images, dtype=dtype_real)
   psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
   batch_size, _ , _ = gal_images.get_shape().as_list()
+  #create shear tensor: 0:2 are shears, 2:4 are PSF distortions
   gs = tf.zeros([batch_size,4])
   epsf = method(reconvolution_psf_image) #doesn't work - biased
   with tf.GradientTape() as tape:
@@ -108,7 +110,7 @@ def get_metacal_response(gal_images,
 
   Rs = tape.batch_jacobian(e, gs)
   R, Rpsf = Rs[...,0:2], Rs[...,2:4]
-  return e, R, Rpsf
+  return e, R, Rpsf#, epsf
 
 
 def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,step,step_psf,method):
@@ -118,6 +120,8 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
   """
 
   batch_size, _ , _ = gal_image.get_shape().as_list()
+  
+  #create shear batches to match transformations
   step_batch = tf.constant(step,shape=(batch_size,1),dtype=dtype_real)
     
   noshear = tf.zeros([batch_size,2],dtype=dtype_real)
