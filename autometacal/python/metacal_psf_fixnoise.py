@@ -69,12 +69,48 @@ def generate_mcal_image(gal_images,
   img = tf.math.real(tf.signal.fftshift(im_reconv))
   return img[:,fact*nx:-fact*nx,fact*ny:-fact*ny]
 
+
+
+def generate_mcal_psf(psf_images, gp, padfactor=5):
+  """ Generate a metacalibrated psf image """
+
+  #cast stuff as float32 tensors
+  batch_size, nx, ny = psf_images.get_shape().as_list() 
+  gp = tf.convert_to_tensor(gp, dtype=dtype_real)  
+  psf_images = tf.convert_to_tensor(psf_images, dtype=dtype_real)
+    
+  #pad images
+  fact = (padfactor - 1)//2 #how many image sizes to one direction
+  paddings = tf.constant([[0, 0,], [nx*fact, nx*fact], [ny*fact, ny*fact]])
+  psf_images = tf.pad(psf_images,paddings)
+  
+  #Convert psf images to k space  
+  kpsf = makekpsf(psf_images,dtype=dtype_complex)
+
+  # Compute Fourier mask for high frequencies
+  # careful, this is not exactly the correct formula for fftfreq
+  kx, ky = tf.meshgrid(tf.linspace(-0.5,0.5,padfactor*nx),
+                       tf.linspace(-0.5,0.5,padfactor*ny))
+  mask = tf.cast(tf.math.sqrt(kx**2 + ky**2) <= 0.5, dtype=dtype_complex)
+  mask = tf.expand_dims(mask, axis=0)
+  
+  # Apply shear to the  kpsf image
+  krpsf_sheared = shear(tf.expand_dims(kpsf,-1), gp[...,0], gp[...,1])[...,0]    
+  
+  # Reconvolve with target PSF
+  im_reconv = tf.signal.ifft2d(tf.signal.ifftshift(krpsf_sheared * mask ))
+
+  # Compute inverse Fourier transform
+  img = tf.math.real(tf.signal.fftshift(im_reconv))
+  return img[:,fact*nx:-fact*nx,fact*ny:-fact*ny]
+
 def generate_fixnoise(noise,psf_images,reconvolution_psf_image,g,gp):
   """generate fixnoise image by applying same method and rotating by 90deg"""
   noise = tf.convert_to_tensor(noise,dtype=dtype_real)
   shearednoise = generate_mcal_image(
     noise, psf_images, reconvolution_psf_image, g, gp)
   rotshearednoise = tf.image.rot90(shearednoise[...,tf.newaxis],k=-1)[...,0]
+    
   return rotshearednoise
 
 def get_metacal_response(gal_images,
@@ -91,11 +127,22 @@ def get_metacal_response(gal_images,
   batch_size, _ , _ = gal_images.get_shape().as_list()
   #create shear tensor: 0:2 are shears, 2:4 are PSF distortions
   gs = tf.zeros([batch_size,4])
-  epsf = method(reconvolution_psf_image) #doesn't work - biased
+  with tf.GradientTape() as tape:
+    gp=gs[:,2:4]
+    tape.watch(gp)
+    mcal_psf_image = generate_mcal_psf(
+      psf_images,
+      gp
+    )
+    epsf = method(mcal_psf_image)
+   
+  
+  Repsf = tape.batch_jacobian(epsf,gp)
+    
   with tf.GradientTape() as tape:
     tape.watch(gs)
     # Measure ellipticity under metacal
-    reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.+2.*tf.norm(gs[:,0:2],axis=1))[...,0]
+    reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.001)[...,0]
     mcal_image = generate_mcal_image(gal_images,
                                      psf_images,
                                      reconvolution_psf_image,
@@ -110,7 +157,7 @@ def get_metacal_response(gal_images,
 
   Rs = tape.batch_jacobian(e, gs)
   R, Rpsf = Rs[...,0:2], Rs[...,2:4]
-  return e, R, Rpsf#, epsf
+  return e, R, Rpsf, epsf, Repsf
 
 
 def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,step,step_psf,method):
@@ -129,8 +176,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
   step1m = tf.pad(-step_batch,[[0,0],[0,1]])
   step2p = tf.pad(step_batch,[[0,0],[1,0]])
   step2m = tf.pad(-step_batch,[[0,0],[1,0]])  
-  
-  
+    
   #full mcal image generator
   def generate_mcal_finitediff(gal,psf,rpsf,noise,gs,gp):
     #rpsf = dilate(rpsf[...,tf.newaxis],1.+2.*tf.norm(gs,axis=1))[...,0]
@@ -143,7 +189,7 @@ def get_metacal_response_finitediff(gal_image,psf_image,reconvolution_psf,noise,
     return mcal_image
   
   #noshear
-  reconvolution_psf_image = dilate(reconvolution_psf[...,tf.newaxis],1.+2.*tf.norm(noshear,axis=1))[...,0]
+  reconvolution_psf_image = dilate(reconvolution_psf[...,tf.newaxis],1.+2.*tf.norm(step1p,axis=1))[...,0]
   img0s = generate_mcal_finitediff(gal_image,psf_image,reconvolution_psf_image,noise,noshear,noshear)
   g0s = method(img0s)
   
