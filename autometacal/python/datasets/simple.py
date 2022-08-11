@@ -110,11 +110,11 @@ def make_data(rng,stamp_size = 51,g1=0.,g2=0.):
 
   obj = galsim.Exponential(half_light_radius=gal_hlr).shear(g1=g1,g2=g2)
   obs = galsim.Convolve([psf, obj])
-
-  psf_image = psf.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method='no_pixel').array #psf image
-  gal_image = obj.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method='no_pixel').array #model image
+  method = 'auto'
+  psf_image = psf.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method=method).array #psf image
+  gal_image = obj.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method=method).array #model image
   
-  obs_image = obs.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method='no_pixel').array #observed image, prenoise
+  obs_image = obs.drawImage(nx=stamp_size, ny=stamp_size, scale=scale,method=method).array #observed image, prenoise
   
   noise_image = rng.normal(scale=noise, size=obs_image.shape)
   obs_image += noise_image

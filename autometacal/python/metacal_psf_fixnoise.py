@@ -6,7 +6,7 @@ def generate_mcal_image(gal_images,
                         reconvolution_psf_images,
                         g, gp,
                         padfactor=5):
-  """ Generate a metacalibrated image given input and target PSFs.
+  """ Generate a metacalibration image given input and target PSFs.
   
   Args: 
     gal_images: tf.Tensor or np.array
@@ -72,7 +72,7 @@ def generate_mcal_image(gal_images,
 
 
 def generate_mcal_psf(psf_images, gp, padfactor=5):
-  """ Generate a metacalibrated psf image """
+  """ Generate a metacalibration psf image """
 
   #cast stuff as float32 tensors
   batch_size, nx, ny = psf_images.get_shape().as_list() 
