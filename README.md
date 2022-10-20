@@ -21,8 +21,6 @@ To use quintic interpolation in TensorFlow-addons, follow these additional inter
  - Clone tensorflow addons from [andrevitorelli/addons](https://github.com/andrevitorelli/addons)
  - Switch to /new_kernels branch
  - Compile as instructed
- - clone [andrevitorelli/GalFlow](https://github.com/andrevitorelli/GalFlow)
- - Switch to u/andrevitorelli/interpolation testing branch
  - install it with ` pip install . ` 
 
 
