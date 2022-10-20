@@ -14,7 +14,7 @@ This project relies on the [GalFlow](https://github.com/DifferentiableUniverseIn
 ```bash
 $ pip install git+https://github.com/DifferentiableUniverseInitiative/GalFlow.git
 ```
-And we are also assuming that TensorFlow & TensorFlow-addons is installed.
+And we are also assuming that TensorFlow==2.8.0 is installed.
 
 To use quintic interpolation in TensorFlow-addons, follow these additional interim install instructions:
 
