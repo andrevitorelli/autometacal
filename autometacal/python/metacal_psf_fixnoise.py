@@ -1,11 +1,13 @@
 import tensorflow as tf
 from autometacal.python.galflow import shear, dilate, makekimg, makekpsf, dtype_complex, dtype_real
 
+padfactors = 3
+
 def generate_mcal_image(gal_images,
                         psf_images,
                         reconvolution_psf_images,
                         g, gp,
-                        padfactor=5):
+                        padfactor=padfactors):
   """ Generate a metacalibration image given input and target PSFs.
   
   Args: 
@@ -71,7 +73,7 @@ def generate_mcal_image(gal_images,
 
 
 
-def generate_mcal_psf(psf_images, gp, padfactor=5):
+def generate_mcal_psf(psf_images, gp, padfactor=padfactors):
   """ Generate a metacalibration psf image """
 
   #cast stuff as float32 tensors
@@ -136,7 +138,7 @@ def get_metacal_response(gal_images,
     )
     epsf = method(mcal_psf_image)
    
-  
+  #calibration of psf ellipticities
   Repsf = tape.batch_jacobian(epsf,gp)
     
   with tf.GradientTape() as tape:
