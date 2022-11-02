@@ -122,7 +122,7 @@ def gs_generate_images(**kwargs):
               'scatter_snr': 20,      #
               'pixel_scale' : 0.263,    #
               'stamp_size' : 51,      #
-              'method' : "no_pixel",   #
+              'method' : "auto",   #
              }
 
   defaults.update(kwargs)

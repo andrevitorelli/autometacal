@@ -5,5 +5,3 @@ from autometacal.python.fitting import fit_multivariate_gaussian, get_ellipticit
 from autometacal.python.gaussmom import get_moment_ellipticities, moments
 from autometacal.python.galflow import shear, dilate
 from autometacal.python.util import noiseless_real_mcal_image
-import autometacal.python.metacal_psf as metacal_psf
-import autometacal.python.metacal_psf_fixnoise as metacal_psf_fixnoise
