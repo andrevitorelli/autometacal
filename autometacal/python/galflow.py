@@ -1,17 +1,12 @@
 import tensorflow as tf
 from tensorflow_addons.image import resampler
 
-_NUMERICAL_RESOLUTION = 32
 _INTERPOLATOR = "bernsteinquintic"
 
-if _NUMERICAL_RESOLUTION == 32:
-  dtype_complex = tf.complex64
-  dtype_real = tf.float32
-  dtype_int = tf.int32
-if _NUMERICAL_RESOLUTION == 64:
-  dtype_complex = tf.complex128
-  dtype_real = tf.float64
-  dtype_int = tf.int64
+dtype_complex = tf.complex64
+dtype_real = tf.float32
+dtype_int = tf.int32
+
  
 def shear(img,g1,g2,interpolation=_INTERPOLATOR):
   """

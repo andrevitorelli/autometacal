@@ -145,7 +145,7 @@ def get_metacal_response(gal_images,
   #measurement and callibration of galaxy stamps
   with tf.GradientTape() as tape:
     tape.watch(gs)
-    reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.001)[...,0]
+    reconvolution_psf_image = dilate(reconvolution_psf_image[...,tf.newaxis],1.01)[...,0]
     mcal_image = generate_mcal_image(gal_images,
                                      psf_images,
                                      reconvolution_psf_image,
@@ -160,22 +160,6 @@ def get_metacal_response(gal_images,
   Rs = tape.batch_jacobian(e, gs)
   R, Rpsf = Rs[...,0:2], Rs[...,2:4]
   return e, R, Rpsf, epsf, Repsf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

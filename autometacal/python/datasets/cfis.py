@@ -79,7 +79,7 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
         citation=_CITATION,
     )
 
-  def _split_generators(self, dl_manager: tfds.download.DownloadManager):
+  def _split_generators(self, dl_manager: tfds.core.download.DownloadManager):
     """Returns SplitGenerators."""
     if self.builder_config.data_set_size:
       size = self.builder_config.data_set_size
