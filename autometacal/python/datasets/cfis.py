@@ -68,7 +68,7 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
                                                    self.builder_config.stamp_size],
                                         dtype=tf.float32),    
 
-          "noise_std": tfds.features.Tensor(shape=[1], dtype=tf.float32),
+          #"noise_std": tfds.features.Tensor(shape=[1], dtype=tf.float32),
           "mag": tfds.features.Tensor(shape=[1], dtype=tf.float32),                                   
 	      }),
         # If there's a common (input, target) tuple from the
@@ -134,5 +134,5 @@ class CFIS(tfds.core.GeneratorBasedBuilder):
 
       yield '%d'%i, {"gal_model": gal_stamp, 
                      "psf_image": psf_stamp, 
-                     "noise_image": noise_stamp, 
+                     #"noise_std": noise_std, 
                      "mag": np.array([gal_mag]).astype('float32')}
