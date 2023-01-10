@@ -2,9 +2,9 @@ import numpy as np
 import tensorflow as tf
 import galsim
 import ngmix
+import numpy as np
 
-
-galsimrot90 = galsim.Angle(90,galsim.AngleUnit(pi/180.))
+galsimrot90 = galsim.Angle(90,galsim.AngleUnit(np.pi/180.))
 
 def make_noise(noise_level,batch_size,stamp_size):
   '''make a simple gaussian noise stamp'''
