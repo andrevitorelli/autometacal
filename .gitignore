@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+# plots generated while prototyping
+notebooks/*.png
+notebooks/*.pdf
+notebooks/*.jpg
+notebooks/*.jpeg
+
+# saved data from experiments
+*.npy
+
 # Distribution / packaging
 .Python
 build/
