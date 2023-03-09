@@ -20,7 +20,7 @@ notebooks/*.jpeg
 notebooks/*.jpg
 notebooks/*.jpeg
 notebooks/*.png
-
+notebooks/old_experiments/
 #temporary data
 notebooks/*.npy
 >>>>>>> 90cbc68 (ignoring tests)
