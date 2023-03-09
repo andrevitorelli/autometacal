@@ -6,6 +6,7 @@ __pycache__/
 # C extensions
 *.so
 
+<<<<<<< HEAD
 # plots generated while prototyping
 notebooks/*.png
 notebooks/*.pdf
@@ -14,6 +15,15 @@ notebooks/*.jpeg
 
 # saved data from experiments
 *.npy
+=======
+#plots
+notebooks/*.jpg
+notebooks/*.jpeg
+notebooks/*.png
+
+#temporary data
+notebooks/*.npy
+>>>>>>> 90cbc68 (ignoring tests)
 
 # Distribution / packaging
 .Python
