@@ -6,7 +6,6 @@ __pycache__/
 # C extensions
 *.so
 
-<<<<<<< HEAD
 # plots generated while prototyping
 notebooks/*.png
 notebooks/*.pdf
@@ -23,7 +22,6 @@ notebooks/*.png
 notebooks/old_experiments/
 #temporary data
 notebooks/*.npy
->>>>>>> 90cbc68 (ignoring tests)
 
 # Distribution / packaging
 .Python
