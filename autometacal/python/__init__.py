@@ -1,4 +1,5 @@
 import autometacal.python.tf_ngmix as tf_ngmix
+import autometacal.python.ksb as ksb
 from autometacal.python.metacal import generate_mcal_image, get_metacal_response, get_metacal_response_finitediff
 from autometacal.python.gaussmom import get_moment_ellipticities, moments
 from autometacal.python.galflow import shear, dilate
