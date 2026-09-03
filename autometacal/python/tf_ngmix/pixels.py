@@ -1,5 +1,5 @@
 """
-Observation implementations from ngmix ported to tensorflow
+Observation implementations from ngmix ported to JAX
 
 Author: esheldon et al. (original), andrevitorelli (port)
 
@@ -7,32 +7,37 @@ ver: 0.0.0
 
 """
 
-import tensorflow as tf
-from autometacal.python.galflow import dtype_real, dtype_int
+import jax.numpy as jnp
+from autometacal.python.galflow import dtype_real
 
-def make_pixels(images, weights, centre, pixel_scale):
-  
-  batch_size, img_x_size, img_y_size = images.get_shape().as_list()
-  
-  #image shape info
-  img_size = img_x_size * img_y_size
-  
-  #apply jacobian (currently constant!)
-  centre_x = tf.cast(centre[0],dtype=dtype_real)
-  centre_y = tf.cast(centre[1],dtype=dtype_real)
-  grid = tf.cast(tf.meshgrid(tf.range(img_x_size,dtype=dtype_int),tf.range(img_y_size,dtype=dtype_int)), dtype_real)
-  X = (grid[0]-centre_x)*pixel_scale
-  Y = (grid[1]-centre_y)*pixel_scale
-  Xs=tf.tile(X[tf.newaxis],[batch_size,1,1])
-  Ys=tf.tile(Y[tf.newaxis],[batch_size,1,1])
-  pixel_scale = tf.cast(pixel_scale,dtype=dtype_real)
-  batch_size = tf.cast(batch_size,dtype=dtype_int)
-  img_size = tf.cast(img_size,dtype=dtype_int)
-  #fill pixels
-  pixels = tf.stack([tf.reshape(Xs,[batch_size,-1]),
-            tf.reshape(Ys,[batch_size,-1]),
-            tf.fill([batch_size,img_size],pixel_scale*pixel_scale), 
-            tf.reshape(images,[batch_size,-1]),
-            tf.reshape(weights,[batch_size,-1])],axis=-1)
-  
-  return pixels
+
+def make_pixels(image, weights, centre, pixel_scale):
+  """ Build an ngmix-style flat pixel list from a single image.
+
+  Args:
+    image: array (nx, ny)
+    weights: array (nx, ny)
+      per-pixel weights
+    centre: (centre_x, centre_y)
+      pixel-coordinate centre used to build the (u, v) grid
+    pixel_scale: float
+
+  Returns:
+    array (nx*ny, 5)
+      flattened (u, v, area, value, weight) pixel list
+  """
+  nx, ny = image.shape
+  centre_x, centre_y = centre
+
+  grid_x, grid_y = jnp.meshgrid(jnp.arange(nx, dtype=dtype_real), jnp.arange(ny, dtype=dtype_real))
+  u = (grid_x - jnp.asarray(centre_x, dtype=dtype_real)) * pixel_scale
+  v = (grid_y - jnp.asarray(centre_y, dtype=dtype_real)) * pixel_scale
+  area = jnp.full((nx * ny,), pixel_scale * pixel_scale, dtype=dtype_real)
+
+  return jnp.stack([
+      u.reshape(-1),
+      v.reshape(-1),
+      area,
+      image.reshape(-1).astype(dtype_real),
+      weights.reshape(-1).astype(dtype_real),
+  ], axis=-1)

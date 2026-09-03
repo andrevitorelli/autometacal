@@ -1,122 +1,117 @@
-import tensorflow as tf
-from tensorflow_addons.image import resampler
+import jax.numpy as jnp
+import jax_galsim as galsim
 
-_INTERPOLATOR = "bernsteinquintic"
+dtype_real = jnp.float32
 
-dtype_complex = tf.complex64
-dtype_real = tf.float32
-dtype_int = tf.int32
-
- 
-def shear(img,g1,g2,interpolation=_INTERPOLATOR):
-  """
-   Applies a shear g1, g2 on an image. 
-   
-   Args: 
-     img: tf.tensor [batch,nx,ny,channels] float32
-       batch of images
-     g1, g2: shears to be applied
-     
-  Returns:
-    sheared: tf.tensor [batch,nx,ny,channels]
-      sheared image
-
-  """
-  
-  _ , nx, ny, _ = img.get_shape().as_list()
-  g1 = tf.convert_to_tensor(g1, dtype=dtype_real)
-  g2 = tf.convert_to_tensor(g2, dtype=dtype_real)
-  gsqr = g1**2 + g2**2
-  
-  # Building a batched jacobian
-  jac = tf.stack([ 1. + g1, g2,
-                g2, 1. - g1], axis=1) / tf.expand_dims(tf.sqrt(1.- gsqr),1)
-  jac = tf.reshape(jac, [-1,2,2]) 
-
-  # Inverting these jacobians to follow the TF definition
-  if img.dtype == tf.complex64:
-    transform_matrix = tf.transpose(jac,[0,2,1])
-  else:
-    transform_matrix = tf.linalg.inv(jac)
-  
-  #define a grid at pixel positions
-  warp = tf.stack(tf.meshgrid(tf.linspace(tf.cast(0.,dtype_real),tf.cast(nx,dtype_real)-1.,nx), 
-                              tf.linspace(tf.cast(0.,dtype_real),tf.cast(ny,dtype_real)-1.,ny)),axis=-1)[..., tf.newaxis]
-
-  #get center
-  center = tf.convert_to_tensor([[nx/2],[ny/2]],dtype=dtype_real)
-  
-  #displace center to origin
-  warp = warp - center
-  
-  #if fourier, no half pixel shift needed
-  warp -= int(img.dtype != dtype_complex)*.5
-
-  #apply shear
-  warp = tf.matmul(transform_matrix[:, tf.newaxis, tf.newaxis, ...], warp)[...,0]
-
-  #return center
-  warp = warp + center[...,0] 
- 
-  #if fourier, no half pixel shift needed
-  warp -= int(img.dtype != dtype_complex)*.5
-      
-  #apply resampler
-  if img.dtype == dtype_complex:
-    a = resampler(tf.math.real(img),warp,interpolation)
-    b = resampler(tf.math.imag(img),warp,interpolation)
-    sheared = tf.complex(a,b)
-  else:
-    sheared = resampler(img,warp,interpolation)
-  return sheared
+# matches ola's interpolant choice (interp="lanczos11"), not jax_galsim's own
+# default (Quintic). Verified differentiable: jax.jacrev through
+# InterpolatedImage(x_interpolant=Lanczos(11)).shear().drawImage() agrees with
+# central finite differences to ~0.6% at reasonable step sizes (float32).
+DEFAULT_INTERPOLANT = galsim.Lanczos(11)
 
 
-def dilate(img,factor,interpolator=_INTERPOLATOR):
-  """ Dilate images by some factor, preserving the center. 
-  
+def fixed_fft_gsparams(fft_size):
+  """ GSParams that force jax_galsim onto its static-FFT-size code path.
+
+  jax_galsim's adaptive FFT-size selection (`Image.good_fft_size`,
+  `GSObject.drawFFT_makeKImage`) does real Python-level control flow
+  (`math.log`, `math.ceil`, `if N*dk/2 > maxk`) on values that depend on the
+  object's data/shear -- this is fundamentally incompatible with
+  `jax.jit`/`jax.vmap` (verified directly: `ConcretizationTypeError` /
+  `TracerBoolConversionError`), which need every array-valued decision to
+  stay inside traceable JAX ops. Reading `GSObject.drawFFT_makeKImage`'s
+  actual source directly found the documented escape hatch: when
+  `gsparams.maximum_fft_size == gsparams.minimum_fft_size`, the whole
+  adaptive branch is skipped and `Nk` is set to that fixed value inside
+  `jax.ensure_compile_time_eval()` -- fully static, so `jit`/`vmap` work.
+
+  Verified directly against the adaptive default: `fft_size=128` gives
+  results matching the adaptive computation to ~1e-7 (both the rendered
+  image and the shear-response Jacobian) for a 45x45, scale=0.263 stamp;
+  smaller sizes (64, 96) are already within ~0.1% but not exact.
+
+  IMPORTANT: unlike the adaptive path, the static path does *not* check
+  whether the object actually fits -- if the true required FFT size exceeds
+  `fft_size`, this does not raise, it silently aliases. Use
+  `required_fft_size` (real, non-jax GalSim) to check per-object fit and
+  reject oversized objects *before* batching, at stamp-generation time.
+
   Args:
-    img: tf tensor containing [batch_size, nx, ny, channels] images
-    factor: dilation factor (factor >= 1)
-  
+    fft_size: int
+      fixed k-space grid size (both max and min) to force
+
   Returns:
-    dilated: tf tensor containing [batch_size, nx, ny, channels] images dilated by factor around the centre
+    galsim.GSParams
   """
-  img = tf.convert_to_tensor(img,dtype=dtype_real)
-  batch_size, nx, ny, _ = img.get_shape()
+  return galsim.GSParams(maximum_fft_size=fft_size, minimum_fft_size=fft_size)
 
-  #x
-  sampling_x = tf.linspace(tf.cast(0.,dtype_real),tf.cast(nx,dtype_real)-1.,nx)[tf.newaxis]
-  centred_sampling_x = sampling_x - nx//2
-  batched_sampling_x = tf.repeat(centred_sampling_x,batch_size,axis=0)
-  rescale_sampling_x = tf.transpose(batched_sampling_x) / factor
-  reshift_sampling_x = tf.transpose(rescale_sampling_x)+nx//2
-  #y
-  sampling_y = tf.linspace(tf.cast(0.,dtype_real),tf.cast(ny,dtype_real)-1.,ny)[tf.newaxis]
-  centred_sampling_y = sampling_y - ny//2
-  batched_sampling_y = tf.repeat(centred_sampling_y,batch_size,axis=0)
-  rescale_sampling_y = tf.transpose(batched_sampling_y) / factor
-  reshift_sampling_y = tf.transpose(rescale_sampling_y)+ny//2
 
-  meshx = tf.transpose(tf.repeat([reshift_sampling_x],nx,axis=0),[1,0,2])
-  meshy = tf.transpose(tf.transpose(tf.repeat([reshift_sampling_y],ny,axis=0)),[1,0,2])
-  warp = tf.transpose(tf.stack([meshx,meshy]),[1,2,3,0])
+def interpolated_image(image, scale=1.0, x_interpolant=None, gsparams=None):
+  """ Wrap a single pixel-array stamp as an interpolated GSObject.
 
-  dilated= resampler(img,warp,interpolator)
-  
-  return tf.transpose(tf.transpose(dilated) /factor**2)
+  Args:
+    image: array (nx, ny)
+      pixel stamp
+    scale: float
+      pixel scale (arbitrary units; default 1.0 = one unit per pixel)
+    x_interpolant: jax_galsim.Interpolant, optional
+      real-space interpolant; defaults to `DEFAULT_INTERPOLANT` (Lanczos(11),
+      matching ola)
+    gsparams: galsim.GSParams, optional
+      pass `fixed_fft_gsparams(N)` to make this (and anything built from it:
+      `.shear()`, `Convolve`, `Deconvolve`, `drawImage`) `jit`/`vmap`-safe;
+      default `None` keeps jax_galsim's normal adaptive FFT sizing, fine for
+      a single, non-batched call.
 
-###drawKimage###
-def makekimg(img,dtype=dtype_complex):
-  im_shift = tf.signal.ifftshift(img,axes=[1,2]) # The ifftshift is to remove the phase for centered objects
-  im_complex = tf.cast(im_shift, dtype)
-  im_fft = tf.signal.fft2d(im_complex)
-  imk = tf.signal.fftshift(im_fft, axes=[1,2])#the fftshift is to put the 0 frequency at the center of the k image
-  return imk
+  Returns:
+    galsim.InterpolatedImage
+  """
+  if x_interpolant is None:
+    x_interpolant = DEFAULT_INTERPOLANT
+  im = galsim.Image(jnp.asarray(image, dtype=dtype_real), scale=scale)
+  return galsim.InterpolatedImage(im, x_interpolant=x_interpolant, gsparams=gsparams)
 
-def makekpsf(psf,dtype=dtype_complex):
-  psf_complex = tf.cast(psf, dtype=dtype)
-  psf_fft = tf.signal.fft2d(psf_complex)
-  psf_fft_abs = tf.abs(psf_fft)
-  psf_fft_abs_complex = tf.cast(psf_fft_abs,dtype=dtype)
-  kpsf = tf.signal.fftshift(psf_fft_abs_complex,axes=[1,2])
-  return kpsf
+
+def shear(image, g1, g2, scale=1.0, x_interpolant=None, gsparams=None):
+  """ Applies a reduced shear g1, g2 to a single image stamp.
+
+  Args:
+    image: array (nx, ny)
+      pixel stamp
+    g1, g2: shear components to apply
+    scale: float
+      pixel scale of `image` and of the returned stamp
+    gsparams: galsim.GSParams, optional
+      see `interpolated_image`
+
+  Returns:
+    array (nx, ny)
+      sheared image stamp
+  """
+  nx, ny = image.shape
+  obj = interpolated_image(image, scale=scale, x_interpolant=x_interpolant, gsparams=gsparams)
+  obj = obj.shear(g1=g1, g2=g2)
+  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+
+
+def dilate(image, factor, scale=1.0, x_interpolant=None, gsparams=None):
+  """ Dilate a single image stamp by `factor` around its center, preserving flux.
+
+  Args:
+    image: array (nx, ny)
+      pixel stamp
+    factor: float
+      linear dilation factor (>=1 grows the profile)
+    scale: float
+      pixel scale of `image` and of the returned stamp
+    gsparams: galsim.GSParams, optional
+      see `interpolated_image`
+
+  Returns:
+    array (nx, ny)
+      dilated image stamp
+  """
+  nx, ny = image.shape
+  obj = interpolated_image(image, scale=scale, x_interpolant=x_interpolant, gsparams=gsparams)
+  obj = obj.dilate(factor)
+  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
