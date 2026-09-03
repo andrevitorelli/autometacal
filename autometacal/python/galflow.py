@@ -1,7 +1,41 @@
+import math
+import warnings
+
 import jax.numpy as jnp
 import jax_galsim as galsim
 
 dtype_real = jnp.float32
+
+# jax_galsim's GSObject._determine_wcs (called on every drawImage()) does
+# `jax.lax.cond(wcs.scale <= 0, branch_a, branch_b, ...)`, and branch_a
+# hardcodes `PixelScale(jnp.float_(nqs))` -- `jnp.float_` is JAX's legacy
+# alias for float64. `lax.cond` abstractly evaluates *both* branches (for
+# output shape/dtype consistency) even though only one actually runs, so
+# this fires on every single drawImage() call regardless of what `scale`/
+# `wcs` we pass in -- verified directly via `python -W error::UserWarning`
+# stack trace; there is no caller-side parameter that avoids it. Since this
+# package deliberately runs float32 throughout (jax_enable_x64 off, for GPU
+# throughput -- see CLAUDE.md), this specific, well-understood warning is
+# always harmless noise here, not a real precision bug; suppress it
+# precisely by message rather than broadly (a real new UserWarning should
+# still surface).
+warnings.filterwarnings(
+    'ignore', message=r'Explicitly requested dtype float64.*', category=UserWarning,
+)
+
+# Second, distinct trigger for the complex128 warning `interpolated_image`'s
+# _force_stepk/_force_maxk avoids for the maxk/stepk *size-estimation* call:
+# `Image.calculate_fft()` also hardcodes `dtype=np.complex128` internally
+# when actually computing an object's k-space *data* during rendering
+# (drawFFT -> _drawKImage -> InterpolatedImage._kim -> calculate_fft()) --
+# unlike the size-estimation case, this one is core, unavoidable work (we
+# genuinely need the k-space representation to render), not something a
+# caller-side parameter can skip. Verified directly the same way. Same
+# reasoning as the float64 case applies: harmless given this package's
+# deliberate float32-everywhere choice.
+warnings.filterwarnings(
+    'ignore', message=r'Explicitly requested dtype complex128.*', category=UserWarning,
+)
 
 # matches ola's interpolant choice (interp="lanczos11"), not jax_galsim's own
 # default (Quintic). Verified differentiable: jax.jacrev through
@@ -69,7 +103,34 @@ def interpolated_image(image, scale=1.0, x_interpolant=None, gsparams=None):
   if x_interpolant is None:
     x_interpolant = DEFAULT_INTERPOLANT
   im = galsim.Image(jnp.asarray(image, dtype=dtype_real), scale=scale)
-  return galsim.InterpolatedImage(im, x_interpolant=x_interpolant, gsparams=gsparams)
+
+  # Force stepk/maxk instead of letting jax_galsim compute them adaptively
+  # from the pixel data. Traced directly (via `python -W error::UserWarning`
+  # to get a full stack trace): the adaptive path (`.maxk`/`.stepk`
+  # properties, triggered by drawImage's internal `_determine_wcs` call)
+  # goes through `InterpolatedImage._getMaxK` -> `._kim` ->
+  # `Image.calculate_fft()`, which hardcodes `dtype=np.complex128`
+  # regardless of the input array's dtype or any `dtype=` we pass to
+  # drawImage -- with jax_enable_x64 off (this package's deliberate
+  # float32-for-GPU choice), that's silently downcast to complex64 on
+  # every single call, generating a `UserWarning` each time. Forcing static
+  # values skips that computation (and its warning) entirely.
+  # maxk = Nyquist frequency for this pixel scale (always a safe upper
+  # bound); stepk matches InterpolatedImage's own default pad_factor=4.0.
+  # Verified directly against the adaptive default: matches to ~0.01%
+  # relative (image) / ~1e-7 (jit/vmap'd response Jacobian, see
+  # `fixed_fft_gsparams`'s docstring for the batching case this shares a
+  # root cause with).
+  nx, ny = image.shape
+  n = max(nx, ny)
+  force_maxk = math.pi / scale
+  force_stepk = 2.0 * math.pi / (4.0 * n * scale)
+
+  return galsim.InterpolatedImage(
+      im, x_interpolant=x_interpolant, gsparams=gsparams,
+      calculate_stepk=False, calculate_maxk=False,
+      _force_stepk=force_stepk, _force_maxk=force_maxk,
+  )
 
 
 def shear(image, g1, g2, scale=1.0, x_interpolant=None, gsparams=None):
@@ -91,7 +152,13 @@ def shear(image, g1, g2, scale=1.0, x_interpolant=None, gsparams=None):
   nx, ny = image.shape
   obj = interpolated_image(image, scale=scale, x_interpolant=x_interpolant, gsparams=gsparams)
   obj = obj.shear(g1=g1, g2=g2)
-  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+  # method='no_pixel': `image` is already rendered pixel data, so the
+  # InterpolatedImage built from it already represents a pixel-convolved
+  # profile (that's what makes drawing it with no_pixel reproduce the input).
+  # method='fft'/'auto' would convolve by an *additional* Pixel on top of
+  # that -- see `generate_mcal_image`'s comment for the full explanation and
+  # how this was found.
+  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='no_pixel').array
 
 
 def dilate(image, factor, scale=1.0, x_interpolant=None, gsparams=None):
@@ -114,4 +181,6 @@ def dilate(image, factor, scale=1.0, x_interpolant=None, gsparams=None):
   nx, ny = image.shape
   obj = interpolated_image(image, scale=scale, x_interpolant=x_interpolant, gsparams=gsparams)
   obj = obj.dilate(factor)
-  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+  # method='no_pixel': see `shear`'s comment above -- `image` already
+  # includes the pixel response, so don't convolve by an extra Pixel here.
+  return obj.drawImage(nx=nx, ny=ny, scale=scale, method='no_pixel').array

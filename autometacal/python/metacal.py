@@ -56,7 +56,33 @@ def generate_mcal_image(gal_image, psf_image, reconvolution_psf_image, g, gp, sc
   sheared_reconv_psf = reconv_psf.shear(g1=gp[0], g2=gp[1])
   reconvolved = galsim.Convolve(sheared_gal, sheared_reconv_psf)
 
-  return reconvolved.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+  # method='no_pixel': `gal_image`/`psf_image`/`reconvolution_psf_image` are
+  # all rendered pixel stamps, so wrapping them as InterpolatedImage already
+  # yields pixel-convolved profiles (that's the round-trip property of
+  # InterpolatedImage: drawing one with no_pixel reproduces the input array).
+  # Deconvolve(psf) correctly cancels that one factor of pixel response along
+  # with the input PSF, leaving a pixel-free, PSF-free profile after
+  # shearing; reconv_psf then reintroduces exactly one factor of pixel
+  # response (via reconvolution_psf_image, itself pixel data). method='fft'
+  # (galsim's default-equivalent) would convolve by an *additional*, unwanted
+  # Pixel on top of that -- jax_galsim's own drawImage source confirms this
+  # explicitly (`if method in ("auto", "fft", "real_space"): prof =
+  # Convolve(prof, Pixel(...))`, skipped for 'no_pixel'), and real GalSim's
+  # docstring for 'no_pixel' says so directly: "This method is the
+  # appropriate choice if you are using a PSF that already includes a
+  # convolution by the pixel response. For example, if you are using a PSF
+  # from an observed image of a star, then it has already been convolved by
+  # the pixel, so you would not want to do so again." ngmix's own metacal
+  # implementation (`ngmix.metacal.metacal.MetacalDilatePSF`) follows the
+  # same pattern for exactly this reason. Verified directly: switching
+  # 'fft'->'no_pixel' here took the ngmix-vs-autometacal cross-check's
+  # measured ellipticity from wildly different to matching to <0.001, and
+  # dropped the residual RMS to ~27% of the pixel noise (max residual ~0.84%
+  # of the image peak, down from ~1.4%) with no coherent spatial structure
+  # left (see notebooks/galaxy_and_psf_diagnostics.ipynb), consistent with
+  # ordinary interpolant differences (Lanczos(11) here vs ngmix's default
+  # lanczos15) acting on the same noise realization, not a real bug.
+  return reconvolved.drawImage(nx=nx, ny=ny, scale=scale, method='no_pixel').array
 
 
 def generate_mcal_psf(reconvolution_psf_image, gp, scale=1.0, gsparams=None):
@@ -82,7 +108,9 @@ def generate_mcal_psf(reconvolution_psf_image, gp, scale=1.0, gsparams=None):
   nx, ny = reconvolution_psf_image.shape
   reconv_psf = interpolated_image(reconvolution_psf_image, scale=scale, gsparams=gsparams)
   sheared = reconv_psf.shear(g1=gp[0], g2=gp[1])
-  return sheared.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+  # method='no_pixel': see `generate_mcal_image`'s comment -- `reconvolution_psf_image`
+  # already includes the pixel response, don't convolve by an extra Pixel.
+  return sheared.drawImage(nx=nx, ny=ny, scale=scale, method='no_pixel').array
 
 
 def generate_fixnoise(noise_image, psf_image, reconvolution_psf_image, g, gp, scale=1.0, gsparams=None):
@@ -126,7 +154,9 @@ def generate_fixnoise(noise_image, psf_image, reconvolution_psf_image, g, gp, sc
   sheared_reconv_psf = reconv_psf.shear(g1=gp[0], g2=gp[1])
   reconvolved = galsim.Convolve(unrotated, sheared_reconv_psf)
 
-  return reconvolved.drawImage(nx=nx, ny=ny, scale=scale, method='fft').array
+  # method='no_pixel': see `generate_mcal_image`'s comment -- all inputs are
+  # already pixel data, don't convolve by an extra Pixel.
+  return reconvolved.drawImage(nx=nx, ny=ny, scale=scale, method='no_pixel').array
 
 
 def get_metacal_response(gal_image, psf_image, reconvolution_psf_image, noise_image,
