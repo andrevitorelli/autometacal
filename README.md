@@ -9,18 +9,16 @@ Project led by [@andrevitorelli](https://github.com/andrevitorelli)
 
 ## Requirements
 
-This project relies on the [GalFlow](https://github.com/DifferentiableUniverseInitiative/GalFlow) library as well as
-[GalSim](https://github.com/GalSim-developers/GalSim). To install GalFlow:
+This project relies on [jax-galsim](https://github.com/GalSim-developers/JAX-GalSim) (which
+itself depends on [GalSim](https://github.com/GalSim-developers/GalSim) `>=2.8`) for
+image interpolation, shearing and (de)convolution, and on [JAX](https://github.com/jax-ml/jax)
+for automatic differentiation:
 ```bash
-$ pip install git+https://github.com/DifferentiableUniverseInitiative/GalFlow.git
+$ pip install jax jaxlib jax-galsim "galsim>=2.8"
 ```
-And we are also assuming that TensorFlow==2.8.0 is installed.
 
-To use quintic interpolation in TensorFlow-addons, follow these additional interim install instructions:
-
- - Clone tensorflow addons from [andrevitorelli/addons](https://github.com/andrevitorelli/addons)
- - Switch to /new_kernels branch
- - Compile as instructed
- - install it with ` pip install . ` 
-
-
+To run the tests, [ngmix](https://github.com/esheldon/ngmix) is also required, as several
+tests cross-check autometacal's results against it:
+```bash
+$ pip install ngmix
+```

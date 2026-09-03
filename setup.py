@@ -12,14 +12,14 @@ with open('README.md', encoding="utf-8") as f:
 
 setup(
     name='Autometacal',
-    description='Metacal implementationmentation in TensorFlow',
+    description='Metacalibration by automatic differentiation, in JAX',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='CosmoStat',
     url='https://github.com/CosmoStat/autometacal',
     license='MIT',
     packages=find_packages(),
-    #install_requires=['tensorflow-addons', 'tensorflow-datasets'],
+    install_requires=['jax', 'jaxlib', 'jax-galsim', 'galsim>=2.8'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',

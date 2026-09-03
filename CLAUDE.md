@@ -1,0 +1,77 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project status and direction
+
+autometacal computes the metacalibration shear response by **automatic differentiation** instead of the standard 5-image finite-difference trick, on single-galaxy stamps. The codebase was migrated from TensorFlow to **JAX + [jax-galsim](https://github.com/GalSim-developers/JAX-GalSim)** — that migration (phases 1-6) is complete; see `plans.md` at the repo root for the full history, the research findings behind each design decision, and any items still marked open there.
+
+Scope: autometacal is a **library** consumable by a shear-measurement pipeline, not a pipeline itself. The single-stamp functions (`get_metacal_response` etc.) operate on plain `(nx, ny)` arrays. Multi-galaxy batching via `jax.vmap` **is supported** (`get_metacal_response_batched`) but requires a fixed FFT grid size shared by the whole batch — see "GPU notes" below; this needed real engineering to unblock, not just calling `vmap`.
+
+Papers: metacalibration (arxiv.org/abs/1702.02600) and the follow-up (arxiv.org/abs/1702.02601). Structural template: `ola`'s `metacal.py` (cloned alongside this repo on dev machines) — same deconvolve/shear/reconvolve pipeline and PSF-response handling, but with `ola`'s finite-difference response replaced by a single autodiff Jacobian.
+
+## Commands
+
+Install:
+```bash
+pip install jax jaxlib jax-galsim "galsim>=2.8"
+pip install ngmix   # only needed to run the test suite (cross-checks against it)
+pip install -e .
+```
+
+Run tests:
+```bash
+pytest                                    # full suite (pytest.ini restricts collection to tests/)
+pytest tests/test_metacal.py              # single file
+pytest tests/test_metacal.py::test_name -v   # single test
+```
+`experiment/` and `notebooks/` are NOT covered by `pytest.ini`'s `testpaths` and are not part of CI — some of that code is still TensorFlow-era and won't import in this environment. No separate lint/build step or bundled type checker.
+
+CI (`.github/workflows/main.yml`) runs on Python 3.12 (jax-galsim requires `>=3.11`) via conda and just runs `pytest`.
+
+## Architecture
+
+Package layout: `autometacal/python/` is the library; `autometacal/__init__.py` re-exports everything from it via `autometacal/python/__init__.py`:
+- `metacal.py` — the core metacalibration pipeline (see below).
+- `galflow.py` — thin `jax_galsim` wrappers: `interpolated_image` (wrap a pixel array as a `jax_galsim.InterpolatedImage`), `shear`, `dilate`. Default interpolant is `DEFAULT_INTERPOLANT = galsim.Lanczos(11)` (matches `ola`'s `interp="lanczos11"`, not `jax_galsim`'s own default of `Quintic`). Everything is single-stamp `(nx, ny)` array in/out, `dtype_real = jnp.float32` throughout (deliberately not float64 — this targets GPUs, where float64 throughput is much worse than float32).
+- `gaussmom.py` / `tf_ngmix/` — a `jax.numpy` port of ngmix's Gaussian-moment machinery (`gmix.py`, `moments.py`, `pixels.py`; directory name is a holdover from the pre-migration TF port, not renamed). Non-iterative, fixed-Gaussian-weight moments only (no adaptive re-centering loop) — this is what keeps it cleanly differentiable. `get_moment_ellipticities` is the `method` callable normally passed into the metacal response functions. Verified against `ngmix.gaussmom.GaussMom` directly in `tests/test_gaussmom.py` (rtol=1e-3).
+- `fitting.py` — model-fitting-based ellipticity estimation. **Still TensorFlow, deliberately not ported/deferred**, and not on the package's default import path (dropped from `autometacal/python/__init__.py` specifically so the rest of the package stays importable without TF installed). Only touch this if you're taking on porting it.
+
+`datasets/` (TFDS-based synthetic stamp generators) and `util.py` (`noiseless_real_mcal_image`) were both retired during the migration — see plans.md's Phase 4 entry for why (TFDS scaffolding had no JAX equivalent worth porting to and wasn't used by any goal test; `util.py` was fully redundant with `galflow.py`+`jax_galsim` object composition).
+
+Core metacal flow (`metacal.py`):
+1. `generate_mcal_image` / `generate_mcal_psf`: build `jax_galsim.InterpolatedImage`s from the input arrays, compose `Deconvolve`/`Convolve`/`.shear()` lazily (matching real GalSim's own architecture — a lazy coordinate-transform composition, not a cascade of separate resample steps), and rasterize once via `drawImage(method='fft')`. `generate_mcal_psf` shears the **reconvolution** PSF (not the observed one) — this matches `ola`'s structure, which differed from this repo's pre-migration TF behavior; see plans.md's Phase 2 entry.
+2. `generate_fixnoise`: ports `ola`'s actual noise-cancellation recipe (deconvolve by the observed PSF, rotate 90°, shear by the galaxy shear `g`, rotate back -90°, reconvolve with the `gp`-sheared reconvolution PSF) rather than the pre-migration TF code's "process then rotate the final result" approach. The 90°/-90° rotation sandwich is mathematically equivalent to directly shearing the deconvolved noise by `-g` (confirmed algebraically in plans.md).
+3. `get_metacal_response`: the autodiff path. Builds a single joint function of `gs = [g1, g2, gp1, gp2]` (galaxy shear + PSF calibration shear, both shearing the *same* image graph), applies `jax.jacrev` to get `R` (columns 0:2) and `Rpsf` (columns 2:4) in one call, evaluated at `gs = _response_eps` (currently `1e-3`) rather than literal `0.0`. **Do not change `_response_eps` casually** — `jax_galsim`'s autodiff through this chain returns all-NaN at exactly `g=0` for perfectly circularly-symmetric inputs (a real, unfixed upstream issue, confirmed to persist even in float64 — not a precision artifact), and separately, in float32, the Jacobian becomes numerically unstable (silently blows up, not NaN) below `eps≈1e-4` (a genuine float32 precision-floor effect, verified against finite differences — float64 pushes that floor to `~1e-6`, but this repo stays float32 for GPU throughput). `1e-3` sits safely inside the stable region on both fronts.
+4. `get_metacal_response_finitediff`: the classic 5-image central-difference version, kept as a correctness oracle to check the autodiff result against — not a production path.
+5. `get_metacal_response_batched`: `jax.vmap` over `get_metacal_response` for a batch `(B, nx, ny)` of galaxies in one GPU dispatch. Requires `fft_size` (a fixed FFT grid size for the whole batch — see "GPU notes"). Verified bit-exact (`0.0` max abs diff) against the unbatched function on identical inputs, and gave a real **~5.8x/galaxy** speedup at `chunk_size=4` on a 6GB laptop GPU. `fits_fixed_fft_size(gal_image, psf_image, reconvolution_psf_image, fft_size, scale)` checks *before* batching whether a given galaxy actually fits that `fft_size` — reject (skip) it if not; the batched path itself does not check and will silently alias rather than error on an oversized object.
+
+`method` is a pluggable callable `(image) -> ellipticities` (shape `(2,)`) passed into the response functions — normally `gaussmom.get_moment_ellipticities`. Keep this shape when extending metacal so autodiff still flows cleanly through the Jacobian.
+
+## Tests
+
+- `test_metacal.py` — `generate_mcal_image` vs `ngmix.metacal.get_all_metacal` on the same observation (cross-implementation tolerance: different default interpolant and float precision than ngmix's own metacal).
+- `test_metacal_ngmix.py` — **the goal test**: on one realistic stamp, checks the autodiff response against both the finite-diff oracle and ngmix's own independent metacal response. This is the concrete, falsifiable proof the migration's actual purpose works — treat it as the acceptance test for any change to `metacal.py`.
+- `test_gaussmom.py` — `get_moment_ellipticities` vs `ngmix.gaussmom.GaussMom` directly, tight tolerance.
+- `test_interpolation_gradients.py` — `jax.jacrev` through `galflow.shear` vs central finite differences, for both `Lanczos(11)` and `Quintic`. Step sizes are deliberately not tiny (float32 precision floor, see above) — don't shrink them without re-reading that comment.
+
+## GPU notes
+
+JAX auto-selects GPU by default here (`jax.devices()` → `[CudaDevice(id=0)]`) since `jax`/`jax-cuda13-*` are installed — this machine has an NVIDIA RTX 4050 laptop GPU with only **6GB VRAM**, shared with the WSL2 host/compositor. It's explicitly a prototyping stand-in here for a much larger production GPU, so knobs are sized to be *configurable*, not hardcoded to what fits on this card.
+
+**Single-stamp calls**: GPU is **~2x slower than CPU** (5.88s/call GPU vs 2.73s/call CPU for `get_metacal_response`, unjitted) — small (~45x45), sequential, non-batched calls are exactly the shape where dispatch/PCIe/WSL2-passthrough overhead dominates over any parallelism benefit. Expected, not a bug.
+
+**Batched calls (`get_metacal_response_batched`) are where GPU actually pays off** — a real **~5.8x/galaxy** speedup was measured at `chunk_size=4` on this same 6GB card (1.4s/galaxy batched vs 8.2s/galaxy sequential steady-state). Getting `jax.vmap`/`jax.jit` to work through `jax_galsim`'s deconvolve/shear/reconvolve chain at all took real work, not just wrapping the call:
+
+- **Root cause**: `jax_galsim`'s adaptive FFT-size selection (`Image.good_fft_size`, and the `if N*dk/2 > maxk` branch in `GSObject.drawFFT_makeKImage`) does real Python-level control flow (`math.log`, `math.ceil`, a Python `if` on a derived bool) on values that depend on the object's shear/data — fundamentally untraceable (`ConcretizationTypeError` / `TracerBoolConversionError` under `jit`/`vmap`). This is a *different* manifestation of the same underlying `jax_galsim` limitation noted in plans.md's `vmap`-over-shears finding — same root cause, hit via a different code path.
+- **The fix**: reading `drawFFT_makeKImage`'s actual current source (not just a truncated view of it) found jax_galsim's own documented escape hatch — when `gsparams.maximum_fft_size == gsparams.minimum_fft_size`, the whole adaptive branch is skipped and the FFT size is set to that fixed value inside `jax.ensure_compile_time_eval()`, fully static. `galflow.fixed_fft_gsparams(N)` builds this; `get_metacal_response`/`generate_mcal_image`/etc. all take an optional `gsparams=` to use it. Verified directly against the adaptive default: `N=128` matches to ~1e-7 (both the rendered image and the response Jacobian) for a 45x45, scale=0.263 stamp; `N=64`/`96` are already within ~0.1% but not exact. `N=32` is too small to even hold the output (`subImage not fully in image`).
+- **The catch**: unlike the adaptive path, the fixed-size path does *not* check whether an object actually fits — an oversized galaxy silently aliases rather than erroring. `metacal.fits_fixed_fft_size(gal_image, psf_image, reconvolution_psf_image, fft_size, scale)` runs the real (eager, adaptive, eager-mode-so-untraced) computation capped at `fft_size` and reports pass/fail — call this on every candidate *before* batching (at CPU stamp-generation time) and skip anything that fails. In practice a real, non-negligible fraction of resolution-cut-passing COSMOS galaxies fail this (see `pujol_test.py` run logs) — expect a rejection rate, not zero.
+- **Chunking**: `get_metacal_response_batched` takes the whole batch as one `jax.vmap` call; the *caller* is responsible for splitting a larger galaxy set into GPU-memory-sized chunks (`pujol_test.py`'s `--chunk-size`, default 4 -- sized for this 6GB card; bump it up substantially on real hardware, that's the reason it's a knob and not a constant). Auto-detecting a safe chunk size from available GPU memory was considered and deliberately not built (fragile heuristic, memory need depends on `fft_size` and batch size non-trivially) — explicit and measured beats a guess.
+
+**Memory hygiene**: JAX's default `XLA_PYTHON_CLIENT_PREALLOCATE=true` grabs ~75% of *available* GPU memory on the very first op, regardless of actual need — verified directly: 5.1GB out of 6.1GB total for a single trivial array. On this small, shared card that's needlessly greedy. `experiment/*.py` scripts set `os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')` before importing jax/autometacal to fix this (drops footprint to <1GB); the core package deliberately does **not** impose this itself (a global JAX memory policy is the calling application's call, not a library's).
+
+## Working areas not covered by CI
+
+- `experiment/` — active prototyping/validation scripts. `cosmos_calibration_test.py` and `pujol_test.py` are JAX/real-GalSim, working, and have their own detailed docstrings (Pujol bias test methodology, known galaxy-selection/memory-safety/ellipticity-convention gotchas — read those before changing either). Other files here (`data_generator.py`, `ngmix_runner.py`, `shear_estimation.py`, `test_runners.py`, `test_script.py`) are still TensorFlow-era and won't import in this environment.
+- `notebooks/` — exploratory/comparison notebooks predating the JAX migration; `notebooks/old_experiments/` is superseded scratch work.
+- `paper/` — LaTeX source for the associated paper.
