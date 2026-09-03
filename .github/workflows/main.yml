@@ -21,7 +21,7 @@ jobs:
     name: tests
     strategy:
       matrix:
-        pyver: [3.8]
+        pyver: [3.12]
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -49,11 +49,10 @@ jobs:
             flake8 \
             scipy \
             pytest \
-            galsim \
+            "galsim>=2.8" \
             ngmix
-          
-          python -m pip install tensorflow==2.5.0 tensorflow_addons==0.13.0 tensorflow_probability==0.13.0 numdifftools
-          python -m pip install git+https://github.com/DifferentiableUniverseInitiative/GalFlow.git
+
+          python -m pip install jax jaxlib jax-galsim
           python -m pip install -e .
       - name: test
         shell: bash -l {0}

@@ -1,61 +1,73 @@
-# This module tests tfa gradients in respect to interpolation methods.
+# This module tests that jax_galsim's interpolants are actually
+# differentiable through autometacal.galflow.shear -- i.e. that
+# jax.jacrev(shear) gives the true derivative w.r.t. the shear, not just
+# "doesn't crash/NaN". Cross-checked against central finite differences.
+#
+# Note: this pipeline runs in float32 by default (see plans.md). Finite
+# differences below a step of ~1e-4 become meaningless in float32 (the
+# rendered image stops changing at all -- verified directly while
+# investigating this), so the step sizes here are deliberately not tiny.
+import jax
+import jax.numpy as jnp
+import jax_galsim as galsim
 import numpy as np
-from tensorflow_addons.image import resampler
-from scipy.misc import face
-import numdifftools
-import tensorflow as tf
-
 from numpy.testing import assert_allclose
 
+from autometacal.python.galflow import shear as am_shear
 
-def facer(interpolant, warp_tf):
-  image = face(gray=True)[-512:-512+128,-512:-512+128].astype('float32')
-  image_tf = tf.convert_to_tensor(image.reshape([1,128,128, 1]))
-  #define a shift
-  shift = tf.zeros([1,2])
+N = 32
+_x = np.arange(N) - N / 2 + 0.5
+_xx, _yy = np.meshgrid(_x, _x)
+# asymmetric test stamp: a symmetric input sits exactly at the documented
+# zero-shear NaN singularity (see plans.md), which is a separate, known issue
+# unrelated to interpolant differentiability
+_IMAGE = (
+    np.exp(-(_xx**2 + _yy**2) / (2 * 4.0**2))
+    + 0.3 * np.exp(-((_xx - 3) ** 2 + (_yy - 1) ** 2) / (2 * 2.0**2))
+).astype(np.float32)
 
-  #calculate derivatives via tf.GradientTape
-  with tf.GradientTape() as tape:
-      tape.watch(shift)
-      ws = tf.reshape(shift,[1,1,1,2]) + warp_tf
-      o = resampler(image_tf, ws, interpolant)
-  autodiff_jacobian = tape.batch_jacobian(o, shift) 
 
-  #calculate derivatives via numdifftools
-  def fn(shift):
-      shift = tf.convert_to_tensor(shift.astype('float32'))
-      ws = tf.reshape(shift,[1,1,1,2]) + warp_tf
-      o = resampler(image_tf, ws, interpolant)
-      return o.numpy().flatten()
+def finite_diff_jacobian(f, g0, h=1e-2):
+  cols = []
+  for i in range(g0.shape[0]):
+    gp = g0.at[i].add(h)
+    gm = g0.at[i].add(-h)
+    cols.append((f(gp) - f(gm)) / (2 * h))
+  return jnp.stack(cols, axis=1)
 
-  numdiff_jacobian = numdifftools.Jacobian(fn, order=4, step=0.04)
-  numdiff_jacobian = numdiff_jacobian(np.zeros([2])).reshape([128,128,2])
-  
-  return autodiff_jacobian[0,...,0,:], numdiff_jacobian
 
-import pytest
+def check_interpolant_gradient(x_interpolant, g0, rtol=0.1, atol=0.05):
+  def f(g):
+    return am_shear(_IMAGE, g[0], g[1], x_interpolant=x_interpolant).flatten()
 
-xfail = pytest.mark.xfail
-@xfail(reason="Fails because it needs the modified tensorflow_addons to work")
-def test_interpolation_gradients():
-  atol = 0.003 #taken from the bilinear case with half step warp.
-  
-  interpolant = "bilinear"
-  #on pixel interpolation
-  int_warp = np.stack(np.meshgrid(np.arange(128), np.arange(128)), axis=-1).astype('float32')
-  int_warp_tf = tf.convert_to_tensor(int_warp.reshape([1,128,128,2]))
-  
-  #half step interpolation
-  half_warp = np.stack(np.meshgrid(np.arange(128), np.arange(128)), axis=-1).astype('float32')
-  half_warp_tf = tf.convert_to_tensor(half_warp.reshape([1,128,128,2])+.5) #add a half-step 
-  
-  autodiff_jacobian_int, numdiff_jacobian_int = facer(interpolant,int_warp_tf)
-  autodiff_jacobian_half, numdiff_jacobian_half = facer(interpolant,half_warp_tf)
-  
-  
-  assert_allclose(autodiff_jacobian_half,numdiff_jacobian_half, rtol=0.1, atol=atol)
-  assert_allclose(autodiff_jacobian_int, numdiff_jacobian_int, rtol=0.1, atol=atol)
-   
+  autodiff_jacobian = jax.jacrev(f)(g0)
+  numdiff_jacobian = finite_diff_jacobian(f, g0)
 
-if __name__=='__main__':
-    test_interpolation_gradients()
+  assert not np.any(np.isnan(np.asarray(autodiff_jacobian)))
+  assert_allclose(
+      np.asarray(autodiff_jacobian), np.asarray(numdiff_jacobian), rtol=rtol, atol=atol,
+  )
+
+
+def test_interpolation_gradients_lanczos11():
+  """ Lanczos(11): autometacal's default interpolant (matches ola). """
+  check_interpolant_gradient(galsim.Lanczos(11), jnp.array([0.02, -0.01]))
+
+
+def test_interpolation_gradients_quintic():
+  """ Quintic: jax_galsim/GalSim's own default interpolant. """
+  check_interpolant_gradient(galsim.Quintic(), jnp.array([0.02, -0.01]))
+
+
+def test_interpolation_gradients_near_zero_shear():
+  """ Gradients should also be well-behaved close to (but not at) g=0, on an
+  asymmetric stamp -- unlike the literal g=0 case on a symmetric stamp,
+  which is a documented, separate singularity (see plans.md).
+  """
+  check_interpolant_gradient(galsim.Lanczos(11), jnp.array([1e-3, -1e-3]))
+
+
+if __name__ == '__main__':
+  test_interpolation_gradients_lanczos11()
+  test_interpolation_gradients_quintic()
+  test_interpolation_gradients_near_zero_shear()
