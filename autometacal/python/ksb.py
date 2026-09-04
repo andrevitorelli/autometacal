@@ -424,6 +424,31 @@ def admom(image, guess_T, row0=None, col0=None, maxiter=200, shiftmax=5.0, etol=
   }
 
 
+def calibrated_g(obs_image, psf_image, scale, psf_upsampling=1.0, sigw=2.0):
+  """ KSB Psh-calibrated shear `g = Psh^-1 @ (e_obs - Psm_obs @ (Psm_psf^-1 @ e_psf))`
+  -- the analytic weight-dilution correction from `correct_ksb`, split out on
+  its own because (unlike `correct_ksb`'s `flux`/`SN`, which go through the
+  non-differentiable `admom`) this is a plain function of `moments()` alone,
+  so it's safe and cheap to use as a `method(image) -> ellipticities (2,)`
+  callable for `get_metacal_response` -- e.g. to reproduce ola's own
+  metacal-on-KSB-corrected-shear convention (`resdict[type]["g"]` in
+  `ola/metacal_package/metacal.py::get_metacal_response`, not a plain
+  geometric e-to-g conversion) for a genuine apples-to-apples cross-check.
+
+  Args:
+    obs_image, psf_image, scale, psf_upsampling, sigw: see `correct_ksb`
+
+  Returns:
+    array (2,): KSB-calibrated shear (g1, g2)
+  """
+  _, obs_moments = size_moments(obs_image, scale, sigw=sigw)
+  _, psf_moments = size_moments(psf_image, scale, sigw=sigw, oversampling=psf_upsampling)
+  return jnp.linalg.solve(
+      obs_moments['Psh'],
+      obs_moments['e'] - obs_moments['Psm'] @ jnp.linalg.solve(psf_moments['Psm'], psf_moments['e']),
+  )
+
+
 def correct_ksb(obs_image, psf_image, scale, psf_upsampling=1.0, sigw=2.0, gain=1.0,
                  sigmasky=None, admom_guess_T=None, admom_kwargs=None):
   """KSB-corrected shear + S/N + resolution for one exposure, JAX port of
@@ -479,7 +504,7 @@ def correct_ksb(obs_image, psf_image, scale, psf_upsampling=1.0, sigw=2.0, gain=
   calib_e = jnp.linalg.solve(
       obs_moments['Psh'],
       obs_moments['e'] - obs_moments['Psm'] @ jnp.linalg.solve(psf_moments['Psm'], psf_moments['e']),
-  )
+  )  # same computation as calibrated_g, inlined to reuse obs_moments/psf_moments already computed above
 
   return {
       'uncal_e': obs_moments['e'],

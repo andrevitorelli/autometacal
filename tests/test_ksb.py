@@ -128,6 +128,33 @@ def test_correct_ksb_recovers_applied_shear_direction():
   assert np.all((ratio > 0.3) & (ratio < 1.2))
 
 
+def test_calibrated_g_matches_correct_ksb_and_is_differentiable():
+  """ `calibrated_g` is `correct_ksb`'s `'g'` computation split out on its
+  own (so it can serve as a `method` callable without the non-differentiable
+  `admom` call `correct_ksb` also makes for flux/SN) -- must give the exact
+  same value, and must be differentiable (unlike `correct_ksb`'s `flux`/`SN`,
+  which go through `admom`).
+  """
+  g1_true, g2_true = 0.05, -0.03
+  psf = galsim.Kolmogorov(fwhm=0.7)
+  gal = galsim.Exponential(half_light_radius=0.4, flux=5.0e5).shear(g1=g1_true, g2=g2_true)
+  obj = galsim.Convolve(gal, psf)
+
+  obs_image = obj.drawImage(nx=stamp_size, ny=stamp_size, scale=scale, method='no_pixel').array.astype('float32')
+  psf_image = psf.drawImage(nx=stamp_size, ny=stamp_size, scale=scale, method='no_pixel').array.astype('float32')
+
+  obs_j = jnp.asarray(obs_image)
+  psf_j = jnp.asarray(psf_image)
+
+  g_direct = np.asarray(ksb.calibrated_g(obs_j, psf_j, scale=scale))
+  g_via_correct_ksb = np.asarray(ksb.correct_ksb(obs_j, psf_j, scale=scale)['g'])
+  assert_allclose(g_direct, g_via_correct_ksb, atol=1e-6)
+
+  grad = jax.grad(lambda im: ksb.calibrated_g(im, psf_j, scale=scale)[0])(obs_j)
+  assert jnp.all(jnp.isfinite(grad))
+  assert jnp.any(grad != 0)
+
+
 def test_moments_differentiable():
   """ `moments` (unlike `admom`, which iterates) must stay a plain
   differentiable function of the image -- this is what lets it serve as
